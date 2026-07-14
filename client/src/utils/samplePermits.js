@@ -1,0 +1,98 @@
+// Sample work permits used to seed localStorage the first time the app runs.
+
+export const SAMPLE_PERMITS = [
+  {
+    id: 'permit-sg-ep',
+    countryCode: 'SG',
+    permitType: 'Employment Pass (EP)',
+    title: 'Singapore Employment Pass',
+    description:
+      'Work pass for foreign professionals, managers, and executives earning at least the qualifying salary to work in Singapore.',
+    eligibilityCriteria:
+      'Job offer from a Singapore-registered company; minimum qualifying monthly salary; recognised degree, professional qualifications, or specialist skills.',
+    processingTimeDays: 21,
+    validityMonths: 24,
+    governmentFee: 105,
+    currencyCode: 'SGD',
+    workerType: 'FOREIGN_WORKER',
+    visibility: 'CLIENT_SHAREABLE',
+    sourceUrl: 'https://www.mom.gov.sg/passes-and-permits/employment-pass',
+    version: 1,
+    status: 'PUBLISHED',
+  },
+  {
+    id: 'permit-sg-spass',
+    countryCode: 'SG',
+    permitType: 'S Pass',
+    title: 'Singapore S Pass',
+    description:
+      'Work pass for mid-skilled foreign staff, subject to a dependency ratio ceiling and levy.',
+    eligibilityCriteria:
+      'Minimum qualifying salary; relevant diploma or technical certificate; job must be on the accepted occupation list.',
+    processingTimeDays: 21,
+    validityMonths: 24,
+    governmentFee: 75,
+    currencyCode: 'SGD',
+    workerType: 'FOREIGN_WORKER',
+    visibility: 'INTERNAL_STAFF',
+    sourceUrl: 'https://www.mom.gov.sg/passes-and-permits/s-pass',
+    version: 1,
+    status: 'DRAFT',
+  },
+  {
+    id: 'permit-ph-aep',
+    countryCode: 'PH',
+    permitType: 'Alien Employment Permit (AEP)',
+    title: 'Philippines Alien Employment Permit',
+    description:
+      'Document issued by the Department of Migrant Workers authorising a foreign national to work in the Philippines.',
+    eligibilityCriteria:
+      'Valid job offer; proof no Filipino is willing/qualified for the position; supporting company documents.',
+    processingTimeDays: 30,
+    validityMonths: 12,
+    governmentFee: 8000,
+    currencyCode: 'PHP',
+    workerType: 'FOREIGN_WORKER',
+    visibility: 'CLIENT_SHAREABLE',
+    sourceUrl: '',
+    version: 1,
+    status: 'PUBLISHED',
+  },
+  {
+    id: 'permit-my-ep',
+    countryCode: 'MY',
+    permitType: 'Employment Pass',
+    title: 'Malaysia Employment Pass',
+    description:
+      'Pass for expatriates employed in managerial, executive, or technical/specialist roles in Malaysia.',
+    eligibilityCriteria:
+      'Minimum monthly salary threshold; relevant qualifications/experience; employer meets equity and localisation requirements.',
+    processingTimeDays: 20,
+    validityMonths: 24,
+    governmentFee: 125,
+    currencyCode: 'MYR',
+    workerType: 'EXPATRIATE',
+    visibility: 'INTERNAL_STAFF',
+    sourceUrl: '',
+    version: 1,
+    status: 'PUBLISHED',
+  },
+  {
+    id: 'permit-vn-wp',
+    countryCode: 'VN',
+    permitType: 'Work Permit for Foreign Employee',
+    title: 'Vietnam Work Permit (Superseded)',
+    description:
+      'Previous work permit process retained for reference; superseded by an updated circular.',
+    eligibilityCriteria: 'Retained for historical reference only.',
+    processingTimeDays: 15,
+    validityMonths: 24,
+    governmentFee: 0,
+    currencyCode: 'VND',
+    workerType: 'FOREIGN_WORKER',
+    visibility: 'COMPLIANCE_ONLY',
+    sourceUrl: '',
+    version: 1,
+    status: 'ARCHIVED',
+  },
+];
