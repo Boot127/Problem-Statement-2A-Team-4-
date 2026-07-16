@@ -6,5 +6,6 @@ node_modules
 # generate their own local copy.
 database/*.db
 database/*.db-journal
+database/*.db
 database/*.db-shm
 database/*.db-wal
