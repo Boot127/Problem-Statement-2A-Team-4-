@@ -1,0 +1,10 @@
+node_modules
+.env
+
+# Local SQLite database (Dev 2 / Work Permit Management). The schema that
+# creates it lives in database/schema.sql and is tracked so teammates can
+# generate their own local copy.
+database/*.db
+database/*.db-journal
+database/*.db-shm
+database/*.db-wal
