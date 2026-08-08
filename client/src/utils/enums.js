@@ -28,3 +28,38 @@ export const PERMIT_STATUS_LABELS = {
 // Statuses a user may pick directly on the create/edit form.
 // ARCHIVED is only reachable via the dedicated archive action.
 export const EDITABLE_PERMIT_STATUSES = ['DRAFT', 'PUBLISHED'];
+
+export const REVIEW_STATUSES = [
+  'PENDING',
+  'IN_REVIEW',
+  'APPROVED',
+  'CHANGES_REQUESTED',
+  'REJECTED',
+  'ARCHIVED',
+];
+
+export const REVIEW_STATUS_LABELS = {
+  PENDING: 'Pending',
+  IN_REVIEW: 'In Review',
+  APPROVED: 'Approved',
+  CHANGES_REQUESTED: 'Changes Requested',
+  REJECTED: 'Rejected',
+  ARCHIVED: 'Archived',
+};
+
+// Statuses a user may pick directly on the create/edit form.
+// ARCHIVED is only reachable via the dedicated archive action.
+export const EDITABLE_REVIEW_STATUSES = [
+  'PENDING',
+  'IN_REVIEW',
+  'APPROVED',
+  'CHANGES_REQUESTED',
+  'REJECTED',
+];
+
+export const TARGET_TYPES = ['compliance_record', 'work_permit'];
+
+export const TARGET_TYPE_LABELS = {
+  compliance_record: 'Compliance Record',
+  work_permit: 'Work Permit',
+};

@@ -1,5 +1,5 @@
 import { Chip } from '@mui/material';
-import { PERMIT_STATUS_LABELS } from '../../utils/enums';
+import { PERMIT_STATUS_LABELS, REVIEW_STATUS_LABELS } from '../../utils/enums';
 
 // Shared chip rendering content/review status (Section 12)
 const COLOR_MAP = {
@@ -13,12 +13,14 @@ const COLOR_MAP = {
   REJECTED: 'error',
 };
 
+const LABEL_MAP = { ...PERMIT_STATUS_LABELS, ...REVIEW_STATUS_LABELS };
+
 export default function StatusChip({ status }) {
   if (!status) return null;
   return (
     <Chip
       size="small"
-      label={PERMIT_STATUS_LABELS[status] || status}
+      label={LABEL_MAP[status] || status}
       color={COLOR_MAP[status] || 'default'}
       variant={status === 'ARCHIVED' ? 'outlined' : 'filled'}
     />

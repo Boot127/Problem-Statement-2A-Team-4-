@@ -6,9 +6,9 @@ import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettingsOutlined';
 
-// Sidebar navigation for the platform shell. Only "Work Permits" points at a
-// fully implemented feature (Developer 2); the rest render placeholder pages
-// until their owning developer builds them out.
+// Sidebar navigation for the platform shell. "Work Permits" (Developer 2) and
+// "Review & Approval" (Developer 3) point at fully implemented features; the
+// rest render placeholder pages until their owning developer builds them out.
 export const NAV_ITEMS = [
   { label: 'Dashboard', path: '/', icon: DashboardOutlinedIcon },
   { label: 'Compliance Content', path: '/content', icon: ArticleOutlinedIcon },
