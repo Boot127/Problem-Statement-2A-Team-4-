@@ -11,49 +11,69 @@ working SQLite backend before this was merged in.
 
 - **Shared foundation + Dev 1 (Compliance Content):** `countries`, `users`,
   `compliance_records`, `benefit_components`, `record_attachments`,
-  `audit_logs` — `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`,
+  `record_versions` (read-only from this side), `audit_logs` —
+  `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`,
   `GET/POST /records`, `GET/PUT /records/:id`, `PATCH /records/:id/archive`,
-  `POST /records/:id/components`, `POST /records/:id/attachments`,
-  `POST /records/:id/ai-assist`, `GET /search`, `GET /audit-logs`.
+  `GET /records/:id/versions`,
+  `POST /records/:id/components`, `PUT/DELETE /records/:id/components/:componentId`,
+  `POST /records/:id/attachments`, `DELETE /records/:id/attachments/:attachmentId`,
+  `POST /records/:id/ai-assist` (modes: `grammar`, `rewrite`, `summarise`,
+  `translate`), `GET /search`, `GET /audit-logs`.
 - **Dev 2 (Work Permit Management):** `work_permits` — `GET/POST /permits`,
   `GET/PUT /permits/:id`, `PATCH /permits/:id/archive`. Not yet behind auth
   (no `auth`/`authorize` middleware applied to `permitRoutes.js`) — that's
   Dev 2's call to make, not changed here.
-- `review_requests` (Dev 3) and `newsletters`/`detected_updates` (Dev 4) are
-  **not built** — their route/controller/service/repository files are still
-  the original TODO stubs and aren't mounted in `app.js`. (Dev 4 has a
-  client-only newsletters page under `client/src/features/newsletters/`
-  with no backend behind it yet.)
+- **Dev 3 (Review & Approval):** `review_requests`, `review_comments`,
+  `notifications` — `GET/POST /reviews`, `GET/PUT /reviews/:id`,
+  `PATCH /reviews/:id/transition`, `POST /reviews/:id/comments`,
+  `POST /reviews/:id/publish`. Generic over `target_type`
+  (`compliance_record` | `work_permit`); publishing writes a
+  `record_versions`/`permit_versions` snapshot and flips the target's
+  `status` to `PUBLISHED`. The Compliance Content detail page has a
+  "Submit for Review" shortcut on `DRAFT` records that creates a review
+  targeting it directly, and displays the resulting version history once
+  published.
+- **Dev 4 (Legal Updates / Newsletter Management):** `newsletters`,
+  `detected_updates` — `GET/POST /newsletters`, `GET/PUT/DELETE
+  /newsletters/:id`, `POST /newsletters/:id/upload`, `POST
+  /newsletters/:id/summarize` (AI text extraction + relevance flagging),
+  `PATCH /newsletters/:id/review` (human confirm/dismiss decision).
 
-## One shared SQLite database, two connections
+## One connection, every repository, either database provider
 
-`server/database/schema.sql` is the single source of truth for the schema —
-every statement is `CREATE ... IF NOT EXISTS`, so it's safe to apply from
-multiple places. Two files open a connection to the same
-`server/database/hrckmp.db` and each apply the full schema on startup:
+`server/database/schema.sql` is the single source of truth for the SQLite
+schema — every statement is `CREATE ... IF NOT EXISTS`, so it's safe to
+apply repeatedly. `src/config/sqliteDb.js` is the one connection to
+`server/database/hrckmp.db` (`env.sqliteDbPath` / `SQLITE_DB_PATH` in
+`.env`), applying that schema on startup.
 
-- `src/config/db.js` — the shared foundation connection (auth, records).
-  Was an empty placeholder before this merge; now implemented on
-  `better-sqlite3` (see below).
-- `src/config/sqliteDb.js` — Dev 2's Work Permit connection, unchanged.
-
-Both use `env.sqliteDbPath` (`SQLITE_DB_PATH` in `.env`) for the file
-location, so there's exactly one database file, not two.
+Every repository in the app — auth/users/countries, Compliance Content,
+Work Permits, Reviews, Newsletters, Admin Archive Management — goes through
+`src/config/database.js`, which picks SQLite (`config/sqliteDb.js`) or
+Postgres (`config/postgresDb.js`) based on `DB_PROVIDER`, and exposes the
+same `query(text, params)` / `transaction(work)` shape either way. Repos
+write Postgres-style SQL (`$1, $2, ...` placeholders); the SQLite branch
+translates those to `?` placeholders internally, so the exact same query
+text runs unchanged on both providers. This used to be true only for Dev
+2's Work Permit repositories (which pioneered the pattern and the Postgres
+schema in `database/postgres/001_initial_dev2_schema.sql`) — every other
+repository was hardcoded to synchronous `better-sqlite3` calls until the
+rest of the team migrated onto the same layer (see "Postgres/Neon
+migration" below).
 
 ## Deviations from the HLD (and why)
 
-1. **SQLite instead of MySQL 8.** Section 11/17 specifies MySQL, but no
-   MySQL server is available in this environment. Uses `better-sqlite3`
-   (the driver Dev 2's Work Permit feature already depended on — this was
-   originally built against Node's built-in `node:sqlite` instead, but was
-   switched to `better-sqlite3` when merging with Dev 2's work so the whole
-   team is on one driver; both have an essentially identical
-   `prepare/run/get/all` API, so no repository code needed to change). The
-   schema keeps the same table/column names and constraints as the MySQL DDL
-   (ENUM → `TEXT` + `CHECK`, `AUTO_INCREMENT` → `INTEGER PRIMARY KEY
-   AUTOINCREMENT`, `JSON`/`DATETIME` → `TEXT`), so swapping to `mysql2`
-   (already a dependency, unused) later mainly touches `config/db.js` and
-   the repository layer.
+1. **SQLite for local dev, Postgres/Neon for production.** Section 11/17
+   specifies MySQL 8, but no MySQL server is available in this environment,
+   and the team ultimately standardized on Postgres (via Neon) for
+   production instead of MySQL — see "Postgres/Neon migration" below. The
+   SQLite schema keeps the same table/column names and constraints as the
+   original MySQL-shaped DDL (ENUM → `TEXT` + `CHECK`, `AUTO_INCREMENT` →
+   `INTEGER PRIMARY KEY AUTOINCREMENT`, `JSON`/`DATETIME` → `TEXT`), and the
+   Postgres schema in `database/postgres/` mirrors it column-for-column
+   (`VARCHAR` + `CHECK`, `BIGINT GENERATED BY DEFAULT AS IDENTITY`,
+   `TIMESTAMPTZ`), so every repository's query text is written once and runs
+   unchanged against either.
 2. **No hard delete for compliance records.** FR-1.7 is explicit:
    "Archiving shall be a soft delete... records are never hard-deleted."
    There is no `DELETE /records/:id`, and the client only offers Archive.
@@ -65,18 +85,31 @@ location, so there's exactly one database file, not two.
    directly, no FK — a deliberate simplification since a shared countries
    table was "out of scope" for that feature alone), `compliance_records`
    uses a real normalized `countries` table with a FK, since a shared
-   foundation now genuinely exists. Editing an existing benefit component
-   isn't possible from the UI, matching the API, which only supports adding
-   one (`POST /records/:id/components`).
-4. **No `record_versions` table yet.** Per Section 12.2, a version snapshot
-   is only written when an *approved review* is published (FR-3.5), which is
-   Developer 3's review-workflow feature. Nothing populates `record_versions`
-   without that workflow existing, so the table is deferred rather than
-   built empty.
-5. **`PUBLISHED` status is not reachable from the compliance-records API.**
-   Create always starts a record as `DRAFT`; update never changes `status`;
-   the only other transition is `PATCH /records/:id/archive`. Publishing is
-   exclusively Developer 3's action once the review workflow exists.
+   foundation now genuinely exists. Benefit components can now be edited and
+   removed (`PUT`/`DELETE /records/:id/components/:componentId`), not just
+   added — the update/delete services always resolve the parent record via
+   `getById` first, both to enforce visibility and to confirm the component
+   actually belongs to that record before mutating it (a mismatched
+   `:id`/`:componentId` pair 404s rather than touching the wrong record's
+   data). Attachments got the same treatment: `DELETE
+   /records/:id/attachments/:attachmentId` removes the DB row and does a
+   best-effort delete of the file on disk (a missing file never fails the
+   request — the DB row is the source of truth).
+4. **`record_versions` is populated by Developer 3's review workflow, read
+   by Developer 1's side.** Per Section 12.2, a version snapshot is written
+   when an *approved review* is published (FR-3.5) — that write lives in
+   `reviewRepository.js#publish()`, generic over `target_type`. Compliance
+   Content only reads it back (`recordRepository.js#findVersions`, exposed
+   as `GET /records/:id/versions`) and renders it as a version-history panel
+   on the record detail page.
+5. **`PUBLISHED` is now reachable, but only via the review workflow.**
+   Create always starts a record as `DRAFT`; `PUT /records/:id` never
+   changes `status`; `PATCH /records/:id/archive` is the only direct
+   transition on the records API itself. Reaching `PUBLISHED` requires
+   going through Developer 3's review workflow (`POST /reviews` with
+   `targetType: 'compliance_record'` → transition to `APPROVED` →
+   `POST /reviews/:id/publish`), which the record detail page's "Submit for
+   Review" button starts for `DRAFT` records.
 6. **AI provider is Groq, not Anthropic Claude.** Section 16 names Claude
    specifically, but it has no ongoing free tier (billing required); Groq's
    API is free (no credit card) and OpenAI-compatible. See
@@ -90,9 +123,54 @@ location, so there's exactly one database file, not two.
    Suggestion panel visibly labels which one happened ("AI Suggestion
    (live)" vs "Offline Suggestion (not real AI)"), so a misconfigured key
    doesn't quietly masquerade as a working one.
-7. **Search only covers `compliance_records`.** FR-0.7 is cross-entity, but
-   `work_permits` isn't wired into it yet — see `src/services/searchService.js`
-   for the extension point.
+7. **Search covers `compliance_records` and `work_permits`, not reviews or
+   newsletters.** FR-0.7 is cross-entity; Search is now an explicit Dev 1
+   responsibility (HLD Section 5) rather than an unclaimed shared-foundation
+   item. `searchService.js` calls into `complianceContentService` and
+   `workPermitService` rather than duplicating their filtering SQL.
+   Reviews/newsletters aren't included — they're workflow objects without
+   their own `visibility_level`, not browsable content — but adding them
+   later is just another fetch+normalize branch.
+   **Note:** `permitRoutes.js` has no `auth`/`authorize` middleware, so
+   `/permits` itself returns everything regardless of caller. Search applies
+   the shared visibility rule to permits itself (post-query, in
+   `searchService.js`) rather than relying on an enforcement that doesn't
+   exist yet on that route — verified: a `sales` search never surfaces a
+   `COMPLIANCE_ONLY` permit or record, even though `GET /permits` directly
+   would.
+
+## Postgres/Neon migration
+
+Local dev always defaults to SQLite (`DB_PROVIDER` unset or `sqlite`) — none
+of this is required to run the app day to day. To move an existing local
+database to a real Neon project for production/shared use:
+
+1. Create a Neon project (https://neon.tech), then copy the **pooled**
+   connection string into `DATABASE_URL` and the **direct** connection
+   string into `DATABASE_URL_DIRECT` in `.env`. Keep `DB_PROVIDER=sqlite`
+   for now — the steps below all target Postgres directly via
+   `DATABASE_URL_DIRECT`, regardless of what the app itself is running.
+2. `npm run db:migrate` — applies every file in `database/postgres/`
+   (`001`…`005`, one per feature owner) in order, tracked in a
+   `dev2_schema_migrations` table so it's safe to re-run.
+3. `npm run db:migrate:sqlite-to-postgres` — one-time copy of your local
+   `database/hrckmp.db` into the now-empty Postgres database, table by
+   table in foreign-key-safe order (`scripts/migrateSqliteToPostgres.js`).
+   Refuses to run if the destination already has any rows, so it can't
+   silently duplicate data.
+4. `npm run db:verify` — compares row counts and checks for orphaned
+   foreign keys between the two databases (`scripts/verifyMigration.js`).
+5. Only once that passes: set `DB_PROVIDER=postgres` and restart the
+   server. Every repository now reads/writes Neon instead of the local
+   SQLite file — nothing else changes, since they're all written against
+   the same `config/database.js` query shape.
+
+`config/postgresDb.js` also overrides `pg`'s default `BIGINT` type parser to
+return JS numbers instead of strings (`pg`'s default, to avoid precision
+loss past `Number.MAX_SAFE_INTEGER`) — every identity column in this schema
+is well within safe-integer range, and without the override every `row.id`
+would silently be a string under Postgres but a number under SQLite,
+breaking `===` comparisons throughout the app.
 
 ## Setup
 
@@ -148,9 +226,11 @@ curl http://localhost:5000/api/v1/records -H "Authorization: Bearer $TOKEN"
 curl http://localhost:5000/api/v1/permits
 ```
 
-## What's still a TODO stub
+## Status
 
-`reviewController.js`/`reviewRepository.js`/`reviewRoutes.js`,
-`newsletterController.js`/`newsletterRepository.js`/`newsletterRoutes.js`,
-`reviewWorkflowService.js`, `newsletterUpdateService.js` — untouched, for
-Developers 3 and 4.
+All four developers' features are implemented and mounted: shared
+foundation + Compliance Content (Dev 1), Work Permit Management (Dev 2),
+Review & Approval Workflow (Dev 3), and Legal Updates / Newsletter
+Management (Dev 4). Administration (archive management — restore/permanently
+delete archived content) is also built, spanning all three archivable
+entity types; it isn't formally assigned to a developer in the HLD's table.

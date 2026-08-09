@@ -1,10 +1,19 @@
 const { AsyncLocalStorage } = require('async_hooks');
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 const env = require('./env');
 
 if (!env.databaseUrl) {
   throw new Error('DATABASE_URL is required when DB_PROVIDER=postgres');
 }
+
+// pg returns BIGINT (OID 20) columns as strings by default, to avoid silent
+// precision loss past Number.MAX_SAFE_INTEGER. Every identity PK/FK in this
+// schema is BIGINT (matching the SQLite INTEGER PRIMARY KEY columns they
+// mirror), well within safe-integer range for an app this size — without
+// this override, `row.record_id` would be "5" here but 5 under SQLite,
+// silently breaking every `===` comparison against a route-param id
+// (Number(req.params.id)) or a value looked up from another row.
+types.setTypeParser(20, (value) => (value === null ? null : parseInt(value, 10)));
 
 const pool = new Pool({
   connectionString: env.databaseUrl,

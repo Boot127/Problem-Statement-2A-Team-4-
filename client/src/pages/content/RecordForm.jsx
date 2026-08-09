@@ -119,7 +119,7 @@ export default function RecordForm({ recordId, initialValues, onSubmit, onCancel
               onBlur={handleBlur}
               error={touched.summary && Boolean(errors.summary)}
               helperText={touched.summary && errors.summary}
-              onRewriteRequest={(text) => onAiRewriteRequest('summary', text)}
+              onRewriteRequest={(text, mode) => onAiRewriteRequest('summary', text, mode)}
               disabledReason={recordId ? undefined : 'Save first'}
               minRows={2}
               sx={{ gridColumn: { sm: '1 / span 2' } }}
@@ -133,7 +133,7 @@ export default function RecordForm({ recordId, initialValues, onSubmit, onCancel
               onBlur={handleBlur}
               error={touched.fullText && Boolean(errors.fullText)}
               helperText={touched.fullText && errors.fullText}
-              onRewriteRequest={(text) => onAiRewriteRequest('fullText', text)}
+              onRewriteRequest={(text, mode) => onAiRewriteRequest('fullText', text, mode)}
               disabledReason={recordId ? undefined : 'Save first'}
               minRows={5}
               sx={{ gridColumn: { sm: '1 / span 2' } }}

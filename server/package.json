@@ -12,8 +12,9 @@
     "seed": "node src/utils/seed.js",
     "db:migrate": "node scripts/runPostgresMigrations.js",
     "db:migrate:sqlite-to-postgres": "node scripts/migrateSqliteToPostgres.js",
-    "db:verify": "node scripts/verifyDev2Migration.js",
+    "db:verify": "node scripts/verifyMigration.js",
     "db:seed": "node scripts/seedPostgres.js",
+    "test:admin-archives": "node scripts/testAdminArchives.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

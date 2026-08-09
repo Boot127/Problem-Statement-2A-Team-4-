@@ -1,15 +1,15 @@
-const db = require('../config/db');
+const db = require('../config/database');
 
-function listAll() {
-  return db.prepare('SELECT * FROM countries WHERE is_active = 1 ORDER BY country_name').all();
+async function listAll() {
+  return (await db.query('SELECT * FROM countries WHERE is_active = TRUE ORDER BY country_name')).rows;
 }
 
-function findByCode(code) {
-  return db.prepare('SELECT * FROM countries WHERE country_code = ?').get(code) || null;
+async function findByCode(code) {
+  return (await db.query('SELECT * FROM countries WHERE country_code = $1', [code])).rows[0] || null;
 }
 
-function findById(id) {
-  return db.prepare('SELECT * FROM countries WHERE country_id = ?').get(id) || null;
+async function findById(id) {
+  return (await db.query('SELECT * FROM countries WHERE country_id = $1', [id])).rows[0] || null;
 }
 
 module.exports = { listAll, findByCode, findById };

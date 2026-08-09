@@ -1,16 +1,21 @@
 import { useRef, useState } from 'react';
-import { Box, TextField, Button, Stack, Paper, Typography, Alert } from '@mui/material';
+import { Box, TextField, MenuItem, Select, Button, Stack, Paper, Typography, Alert } from '@mui/material';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import { AI_ASSIST_MODES, AI_ASSIST_MODE_LABELS } from '../../utils/enums';
 
 // A multiline TextField with an "AI Rewrite" affordance (FR-1.6 / Section
-// 16.1). `onRewriteRequest(text)` must resolve to the ai-assist response
-// shape ({ suggestion, degraded, reason } — see recordService.aiAssist /
-// server/src/services/aiService.js) — this component has no opinion on how
-// the suggestion is produced, only how it's reviewed (accept/reject) and
-// spliced back in. `degraded: true` means the server fell back to an
-// offline heuristic instead of a real Claude call (no/invalid AI_API_KEY,
-// or the Anthropic API errored) — shown so that isn't mistaken for genuine
-// AI output.
+// 16.1). `onRewriteRequest(text, mode)` must resolve to the ai-assist
+// response shape ({ suggestion, degraded, reason } — see
+// recordService.aiAssist / server/src/services/aiService.js) — this
+// component has no opinion on how the suggestion is produced, only how it's
+// reviewed (accept/reject) and spliced back in. `degraded: true` means the
+// server fell back to an offline heuristic instead of a real AI call
+// (no/invalid AI_API_KEY, or the provider errored) — shown so that isn't
+// mistaken for genuine AI output.
+//
+// Mode (grammar / rewrite / summarise / translate) is chosen per-field via
+// the dropdown next to the action button — Section 16.1 names all four as
+// things "a Compliance user can request."
 //
 // If the user has a text selection inside the field when they trigger the
 // rewrite, only that selection is rewritten; otherwise the whole value is.
@@ -29,6 +34,7 @@ export default function AiRewriteField({
   sx,
 }) {
   const textareaRef = useRef(null);
+  const [mode, setMode] = useState('rewrite');
   const [loading, setLoading] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -49,7 +55,7 @@ export default function AiRewriteField({
     setNotice(null);
     setLoading(true);
     try {
-      const result = await onRewriteRequest(target);
+      const result = await onRewriteRequest(target, mode);
       if (!result?.suggestion) {
         setNotice(result?.note || 'AI writing assistant is temporarily unavailable. Please try again later.');
       } else {
@@ -93,17 +99,30 @@ export default function AiRewriteField({
         fullWidth={fullWidth}
         inputRef={textareaRef}
       />
-      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+      <Stack direction="row" spacing={1} sx={{ mt: 1, alignItems: 'center' }}>
+        <Select
+          size="small"
+          value={mode}
+          onChange={(e) => setMode(e.target.value)}
+          disabled={loading || Boolean(disabledReason)}
+          sx={{ minWidth: 160 }}
+        >
+          {AI_ASSIST_MODES.map((m) => (
+            <MenuItem key={m} value={m}>
+              {AI_ASSIST_MODE_LABELS[m]}
+            </MenuItem>
+          ))}
+        </Select>
         <Button
           size="small"
           startIcon={<AutoAwesomeOutlinedIcon fontSize="small" />}
           onClick={handleRewrite}
           disabled={loading || Boolean(disabledReason)}
         >
-          {loading ? 'Rewriting…' : 'AI Rewrite'}
+          {loading ? 'Working…' : 'Run'}
         </Button>
         {disabledReason && (
-          <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+          <Typography variant="caption" color="text.secondary">
             {disabledReason}
           </Typography>
         )}

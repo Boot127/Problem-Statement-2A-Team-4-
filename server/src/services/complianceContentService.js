@@ -13,15 +13,15 @@ function httpError(status, message) {
   return err;
 }
 
-function resolveCountry(countryCode) {
-  const country = countryRepository.findByCode(countryCode);
+async function resolveCountry(countryCode) {
+  const country = await countryRepository.findByCode(countryCode);
   if (!country) {
     throw httpError(400, `Unknown country code: ${countryCode}`);
   }
   return country;
 }
 
-function list(query, user) {
+async function list(query, user) {
   return recordRepository.list({
     country: query.country,
     category: query.category,
@@ -34,8 +34,8 @@ function list(query, user) {
   });
 }
 
-function getById(id, user) {
-  const record = recordRepository.findById(id, allowedVisibilityFor(user.role));
+async function getById(id, user) {
+  const record = await recordRepository.findById(id, allowedVisibilityFor(user.role));
   if (!record) {
     throw httpError(404, 'Compliance record not found');
   }
@@ -45,31 +45,31 @@ function getById(id, user) {
 // Records with the same country + title + effective date are treated as
 // duplicates of the same fact (the exact scenario the HLD's business
 // problem calls out: "the same fact ... with three different values").
-function assertNotDuplicate(countryId, title, effectiveDate, ignoreId) {
-  if (recordRepository.findDuplicate(countryId, title, effectiveDate, ignoreId)) {
+async function assertNotDuplicate(countryId, title, effectiveDate, ignoreId) {
+  if (await recordRepository.findDuplicate(countryId, title, effectiveDate, ignoreId)) {
     throw httpError(409, 'Duplicate entry detected: a record with the same country, title, and effective date already exists.');
   }
 }
 
-function create(payload, user) {
-  const country = resolveCountry(payload.countryCode);
-  assertNotDuplicate(country.country_id, payload.title, payload.effectiveDate || null);
+async function create(payload, user) {
+  const country = await resolveCountry(payload.countryCode);
+  await assertNotDuplicate(country.country_id, payload.title, payload.effectiveDate || null);
 
-  const record = recordRepository.create({ ...payload, countryId: country.country_id }, user.id);
+  const record = await recordRepository.create({ ...payload, countryId: country.country_id }, user.id);
   auditService.log({ userId: user.id, action: 'create', entityType: 'compliance_record', entityId: record.id, newValue: record });
   return record;
 }
 
-function update(id, payload, user) {
-  const existing = getById(id, user);
+async function update(id, payload, user) {
+  const existing = await getById(id, user);
   if (existing.status === 'ARCHIVED') {
     throw httpError(409, 'Archived records cannot be edited.');
   }
 
-  const country = resolveCountry(payload.countryCode);
-  assertNotDuplicate(country.country_id, payload.title, payload.effectiveDate || null, id);
+  const country = await resolveCountry(payload.countryCode);
+  await assertNotDuplicate(country.country_id, payload.title, payload.effectiveDate || null, id);
 
-  const updated = recordRepository.update(id, { ...payload, countryId: country.country_id }, user.id);
+  const updated = await recordRepository.update(id, { ...payload, countryId: country.country_id }, user.id);
   auditService.log({
     userId: user.id,
     action: 'update',
@@ -83,9 +83,9 @@ function update(id, payload, user) {
 
 // FR-1.7: archiving is the only soft-delete action — compliance_records are
 // never hard-deleted through this API.
-function archive(id, user) {
-  const existing = getById(id, user);
-  const updated = recordRepository.archive(id, user.id);
+async function archive(id, user) {
+  const existing = await getById(id, user);
+  const updated = await recordRepository.archive(id, user.id);
   auditService.log({
     userId: user.id,
     action: 'archive',
@@ -97,15 +97,20 @@ function archive(id, user) {
   return updated;
 }
 
-function addComponent(recordId, payload, user) {
-  const existing = getById(recordId, user);
+async function listVersions(recordId, user) {
+  await getById(recordId, user); // 404s if missing or not visible to this role
+  return recordRepository.findVersions(recordId);
+}
+
+async function addComponent(recordId, payload, user) {
+  const existing = await getById(recordId, user);
   if (existing.status === 'ARCHIVED') {
     throw httpError(409, 'Archived records cannot be edited.');
   }
   if (!payload.componentName) {
     throw httpError(400, 'componentName is required');
   }
-  const component = recordRepository.addComponent(recordId, payload);
+  const component = await recordRepository.addComponent(recordId, payload);
   auditService.log({
     userId: user.id,
     action: 'update',
@@ -116,12 +121,12 @@ function addComponent(recordId, payload, user) {
   return component;
 }
 
-function addAttachment(recordId, fileMeta, user) {
-  const existing = getById(recordId, user);
+async function addAttachment(recordId, fileMeta, user) {
+  const existing = await getById(recordId, user);
   if (existing.status === 'ARCHIVED') {
     throw httpError(409, 'Archived records cannot be edited.');
   }
-  const attachment = recordRepository.addAttachment(recordId, fileMeta, user.id);
+  const attachment = await recordRepository.addAttachment(recordId, fileMeta, user.id);
   auditService.log({
     userId: user.id,
     action: 'update',
@@ -132,11 +137,79 @@ function addAttachment(recordId, fileMeta, user) {
   return attachment;
 }
 
+async function updateComponent(recordId, componentId, payload, user) {
+  const record = await getById(recordId, user);
+  if (record.status === 'ARCHIVED') {
+    throw httpError(409, 'Archived records cannot be edited.');
+  }
+  const existing = record.benefitComponents.find((c) => c.id === componentId);
+  if (!existing) {
+    throw httpError(404, 'Benefit component not found on this record.');
+  }
+  if (!payload.componentName) {
+    throw httpError(400, 'componentName is required');
+  }
+  const updated = await recordRepository.updateComponent(componentId, payload);
+  auditService.log({
+    userId: user.id,
+    action: 'update',
+    entityType: 'benefit_component',
+    entityId: componentId,
+    oldValue: existing,
+    newValue: updated,
+  });
+  return updated;
+}
+
+async function removeComponent(recordId, componentId, user) {
+  const record = await getById(recordId, user);
+  if (record.status === 'ARCHIVED') {
+    throw httpError(409, 'Archived records cannot be edited.');
+  }
+  const existing = record.benefitComponents.find((c) => c.id === componentId);
+  if (!existing) {
+    throw httpError(404, 'Benefit component not found on this record.');
+  }
+  await recordRepository.removeComponent(componentId);
+  auditService.log({
+    userId: user.id,
+    action: 'update',
+    entityType: 'benefit_component',
+    entityId: componentId,
+    oldValue: existing,
+    newValue: null,
+  });
+}
+
+// Returns the deleted attachment's metadata (filePath in particular) so the
+// controller can also remove the file from disk — the service layer stays
+// storage-agnostic and doesn't touch the filesystem itself.
+async function removeAttachment(recordId, attachmentId, user) {
+  const record = await getById(recordId, user);
+  if (record.status === 'ARCHIVED') {
+    throw httpError(409, 'Archived records cannot be edited.');
+  }
+  const existing = record.attachments.find((a) => a.id === attachmentId);
+  if (!existing) {
+    throw httpError(404, 'Attachment not found on this record.');
+  }
+  await recordRepository.removeAttachment(attachmentId);
+  auditService.log({
+    userId: user.id,
+    action: 'update',
+    entityType: 'record_attachment',
+    entityId: attachmentId,
+    oldValue: existing,
+    newValue: null,
+  });
+  return existing;
+}
+
 // FR-1.6 / Section 16.1: the assistant only ever returns a suggestion. It
 // never writes to the record — accepting a suggestion is just a normal
 // PUT /records/:id from the client with the edited text.
 async function aiAssist(recordId, { mode, field, text }, user) {
-  const record = getById(recordId, user);
+  const record = await getById(recordId, user);
   const source = text ?? (field ? record[field] : null);
   if (!source) {
     throw httpError(400, 'Provide `text`, or a `field` (summary|fullText) that has content.');
@@ -153,6 +226,10 @@ module.exports = {
   update,
   archive,
   addComponent,
+  updateComponent,
+  removeComponent,
   addAttachment,
+  removeAttachment,
   aiAssist,
+  listVersions,
 };

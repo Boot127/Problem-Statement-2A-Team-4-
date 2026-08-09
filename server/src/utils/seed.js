@@ -6,7 +6,11 @@
 // Run with: npm run seed
 
 const bcrypt = require('bcrypt');
-const db = require('../config/db');
+// Local-dev-only seeding, so this talks to the SQLite connection directly
+// (same as seedPostgres.js does for the Postgres/Neon side) rather than
+// going through the async config/database.js layer every other repository
+// in the app uses.
+const db = require('../config/sqliteDb');
 
 const COUNTRIES = [
   { code: 'HK', name: 'Hong Kong', currency: 'HKD' },

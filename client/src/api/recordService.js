@@ -33,12 +33,28 @@ function addComponent(id, payload) {
   return axiosClient.post(`/records/${id}/components`, payload).then((res) => res.data.data);
 }
 
+function updateComponent(id, componentId, payload) {
+  return axiosClient.put(`/records/${id}/components/${componentId}`, payload).then((res) => res.data.data);
+}
+
+function removeComponent(id, componentId) {
+  return axiosClient.delete(`/records/${id}/components/${componentId}`);
+}
+
 function addAttachment(id, file) {
   const formData = new FormData();
   formData.append('file', file);
   return axiosClient
     .post(`/records/${id}/attachments`, formData, { headers: { 'Content-Type': 'multipart/form-data' } })
     .then((res) => res.data.data);
+}
+
+function removeAttachment(id, attachmentId) {
+  return axiosClient.delete(`/records/${id}/attachments/${attachmentId}`);
+}
+
+function listVersions(id) {
+  return axiosClient.get(`/records/${id}/versions`).then((res) => res.data.data);
 }
 
 // mode: 'grammar' | 'rewrite' | 'summarise' | 'translate'
@@ -50,4 +66,17 @@ function aiAssist(id, { mode, field, text }) {
   return axiosClient.post(`/records/${id}/ai-assist`, { mode, field, text }).then((res) => res.data.data);
 }
 
-export default { list, getById, create, update, archive, addComponent, addAttachment, aiAssist };
+export default {
+  list,
+  getById,
+  create,
+  update,
+  archive,
+  addComponent,
+  updateComponent,
+  removeComponent,
+  addAttachment,
+  removeAttachment,
+  aiAssist,
+  listVersions,
+};

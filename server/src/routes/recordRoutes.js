@@ -28,8 +28,12 @@ router.get('/:id', visibility, controller.getById);
 router.post('/', authorize('compliance'), validate(recordSchema), controller.create);
 router.put('/:id', authorize('compliance'), validate(recordSchema), controller.update);
 router.patch('/:id/archive', authorize('compliance'), controller.archive);
+router.get('/:id/versions', controller.listVersions);
 router.post('/:id/components', authorize('compliance'), controller.addComponent);
+router.put('/:id/components/:componentId', authorize('compliance'), controller.updateComponent);
+router.delete('/:id/components/:componentId', authorize('compliance'), controller.removeComponent);
 router.post('/:id/attachments', authorize('compliance'), upload.single('file'), controller.addAttachment);
+router.delete('/:id/attachments/:attachmentId', authorize('compliance'), controller.removeAttachment);
 router.post('/:id/ai-assist', authorize('compliance'), controller.aiAssist);
 
 module.exports = router;

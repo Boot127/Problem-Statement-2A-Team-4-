@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS work_permits (
   version               INTEGER NOT NULL DEFAULT 1,
   status                TEXT NOT NULL DEFAULT 'DRAFT'
                           CHECK (status IN ('DRAFT','PUBLISHED','ARCHIVED')),
+  previous_status       TEXT CHECK (previous_status IN ('DRAFT','PUBLISHED')),
+  archived_at           TEXT,
   -- Information-health fields. These answer the client's "is this record still
   -- trustworthy?" question, which is separate from the DRAFT/PUBLISHED content
   -- status. Dates are ISO-8601 date strings (YYYY-MM-DD) so they sort and
@@ -53,15 +55,10 @@ CREATE INDEX IF NOT EXISTS idx_work_permits_country ON work_permits (country_cod
 CREATE INDEX IF NOT EXISTS idx_work_permits_status ON work_permits (status);
 
 -- Review & Approval Workflow (Developer 3) — SQLite schema for local development.
---
--- Mirrors the review_requests fields from docs/database/schema.sql (the MySQL
--- design), trimmed to what basic CRUD needs:
---   - submitted_by / reviewed_by / submitted_at / reviewed_at / published_at
---     are part of the Phase 3 state-machine + notifications enhancement and
---     are intentionally not created yet (out of scope for this basic CRUD pass).
---   - review_comments / notifications are also Phase 3 and not created yet.
---   - target_id's foreign key is enforced in the application layer, same as
---     the MySQL design (target_type is polymorphic across two tables).
+-- Includes state transitions, comments, publication snapshots, notifications,
+-- and the previous state required for safe administrator archive restoration.
+-- target_id is polymorphic across Compliance Content and Work Permits, so its
+-- relationship is validated in the service rather than by a table foreign key.
 --
 -- This file is safe to re-run: every statement is guarded with IF NOT EXISTS.
 
@@ -74,6 +71,9 @@ CREATE TABLE IF NOT EXISTS review_requests (
   description    TEXT,
   review_status  TEXT NOT NULL DEFAULT 'PENDING'
                    CHECK (review_status IN ('PENDING','IN_REVIEW','APPROVED','CHANGES_REQUESTED','REJECTED','ARCHIVED')),
+  previous_status TEXT
+                    CHECK (previous_status IN ('PENDING','IN_REVIEW','APPROVED','CHANGES_REQUESTED','REJECTED')),
+  archived_at     TEXT,
   submitted_by   TEXT,
   reviewed_by    TEXT,
   submitted_at   TEXT,
@@ -173,6 +173,8 @@ CREATE TABLE IF NOT EXISTS compliance_records (
   source_url     TEXT,
   version        INTEGER NOT NULL DEFAULT 1,
   status         TEXT NOT NULL DEFAULT 'DRAFT' CHECK(status IN ('DRAFT','PUBLISHED','ARCHIVED')),
+  previous_status TEXT CHECK(previous_status IN ('DRAFT','PUBLISHED')),
+  archived_at     TEXT,
   created_by     INTEGER REFERENCES users(user_id),
   updated_by     INTEGER REFERENCES users(user_id),
   created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -217,6 +219,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   log_id      INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id     INTEGER REFERENCES users(user_id),
   action      TEXT NOT NULL CHECK(action IN ('create','update','archive','login','logout','publish')),
+  admin_action TEXT CHECK(admin_action IN ('RESTORE_ARCHIVED','PERMANENT_DELETE')),
   entity_type TEXT NOT NULL,
   entity_id   INTEGER,
   old_value   TEXT,
@@ -326,3 +329,53 @@ CREATE TABLE IF NOT EXISTS permit_group_members (
 
 CREATE INDEX IF NOT EXISTS idx_permit_group_members_permit
   ON permit_group_members (permit_id, group_id);
+
+-- ============================================================
+-- DEVELOPER 4 — Legal Updates / Newsletter Management
+-- ============================================================
+-- Mirrors the newsletters/detected_updates fields from docs/database/schema.sql
+-- (the MySQL design), adapted for SQLite:
+--   - ENUM columns become TEXT + CHECK constraints.
+--   - country is stored as free text (matches how the feature was built and
+--     demoed) rather than a normalized countries table FK — consistent with
+--     work_permits' own country_code TEXT column above, for the same reason:
+--     a shared countries table is shared-foundation work, out of scope here.
+--   - Soft delete (is_deleted) is used instead of a hard DELETE so history
+--     is preserved, matching compliance_records' versioning philosophy.
+--
+-- This file is safe to re-run: every statement is guarded with IF NOT EXISTS.
+
+CREATE TABLE IF NOT EXISTS newsletters (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  title           TEXT NOT NULL,
+  country         TEXT NOT NULL,
+  source          TEXT,
+  published_date  TEXT,
+  status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'reviewed', 'archived')),
+  notes           TEXT,
+  file_name       TEXT,
+  file_path       TEXT,
+  is_deleted      INTEGER NOT NULL DEFAULT 0,
+  created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ---------- DETECTED UPDATES (AI-flagged result per newsletter, 1:1) ----------
+CREATE TABLE IF NOT EXISTS detected_updates (
+  id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+  newsletter_id           INTEGER NOT NULL,
+  ai_summary              TEXT,
+  ai_flagged              INTEGER NOT NULL DEFAULT 0,
+  ai_flag_reason          TEXT,
+  review_decision         TEXT NOT NULL DEFAULT 'pending'
+                            CHECK (review_decision IN ('pending', 'confirmed', 'dismissed')),
+  linked_compliance_area  TEXT,
+  reviewed_at             DATETIME,
+  created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (newsletter_id) REFERENCES newsletters(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_newsletters_status ON newsletters (status);
+CREATE INDEX IF NOT EXISTS idx_detected_updates_newsletter ON detected_updates (newsletter_id);

@@ -2,7 +2,38 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const { createDirectPool, safeMessage } = require('./postgresScriptUtils');
 
+// Order matters: every table is listed after every table it has a foreign
+// key into (countries/users before compliance_records, compliance_records
+// before benefit_components/record_attachments, review_requests before
+// review_comments/notifications/record_versions, etc.) so the INSERTs never
+// hit a dangling reference.
 const TABLES = [
+  // ---- Shared foundation + Dev 1 (Compliance Content) ----
+  {
+    name: 'countries', id: 'country_id', booleanColumns: ['is_active'],
+    columns: ['country_id','country_code','country_name','region','currency_code','is_active','created_at','updated_at'],
+  },
+  {
+    name: 'users', id: 'user_id', booleanColumns: ['is_active'],
+    columns: ['user_id','full_name','email','password_hash','role','is_active','failed_attempts','last_login_at','created_at','updated_at'],
+  },
+  {
+    name: 'compliance_records', id: 'record_id', booleanColumns: [],
+    columns: ['record_id','country_id','category','title','summary','full_text','worker_type','visibility','effective_date','source_url','version','status','previous_status','archived_at','created_by','updated_by','created_at','updated_at'],
+  },
+  {
+    name: 'benefit_components', id: 'component_id', booleanColumns: [],
+    columns: ['component_id','record_id','component_name','worker_type','employer_rate','employee_rate','cap_ceiling','calculation_basis','notes','sort_order'],
+  },
+  {
+    name: 'record_attachments', id: 'attachment_id', booleanColumns: [],
+    columns: ['attachment_id','record_id','file_name','file_path','file_type','uploaded_by','uploaded_at'],
+  },
+  {
+    name: 'audit_logs', id: 'log_id', booleanColumns: [],
+    columns: ['log_id','user_id','action','admin_action','entity_type','entity_id','old_value','new_value','created_at'],
+  },
+  // ---- Dev 2 (Work Permit Management) ----
   {
     name: 'work_permits', id: 'permit_id', booleanColumns: [],
     columns: ['permit_id','country_code','permit_type','title','permit_holder_name','client_company_name','description','eligibility_criteria','processing_time_days','validity_months','government_fee','currency_code','worker_type','visibility','source_url','version','status','last_reviewed_at','next_review_at','review_notes','information_status','created_at','updated_at'],
@@ -26,6 +57,32 @@ const TABLES = [
   {
     name: 'permit_group_members', id: null, booleanColumns: [],
     columns: ['group_id','permit_id','added_at'],
+  },
+  // ---- Dev 3 (Review & Approval Workflow) ----
+  {
+    name: 'review_requests', id: 'request_id', booleanColumns: [],
+    columns: ['request_id','target_type','target_id','title','description','review_status','previous_status','archived_at','submitted_by','reviewed_by','submitted_at','reviewed_at','published_at','created_at','updated_at'],
+  },
+  {
+    name: 'review_comments', id: 'comment_id', booleanColumns: [],
+    columns: ['comment_id','request_id','author_name','comment','created_at'],
+  },
+  {
+    name: 'notifications', id: 'notification_id', booleanColumns: ['is_read'],
+    columns: ['notification_id','request_id','recipient','message','is_read','created_at'],
+  },
+  {
+    name: 'record_versions', id: 'version_id', booleanColumns: [],
+    columns: ['version_id','target_type','target_id','version','snapshot','published_at','review_id'],
+  },
+  // ---- Dev 4 (Legal Updates / Newsletter Management) ----
+  {
+    name: 'newsletters', id: 'id', booleanColumns: ['is_deleted'],
+    columns: ['id','title','country','source','published_date','status','notes','file_name','file_path','is_deleted','created_at','updated_at'],
+  },
+  {
+    name: 'detected_updates', id: 'id', booleanColumns: ['ai_flagged'],
+    columns: ['id','newsletter_id','ai_summary','ai_flagged','ai_flag_reason','review_decision','linked_compliance_area','reviewed_at','created_at','updated_at'],
   },
 ];
 

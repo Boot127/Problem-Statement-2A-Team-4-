@@ -11,21 +11,21 @@ function parseId(req, res) {
   return id;
 }
 
-function list(req, res, next) {
+async function list(req, res, next) {
   try {
     const { search, targetType, status } = req.query;
-    const reviews = reviewWorkflowService.listReviews({ search, targetType, status });
+    const reviews = await reviewWorkflowService.listReviews({ search, targetType, status });
     res.json(reviews);
   } catch (err) {
     next(err);
   }
 }
 
-function getById(req, res, next) {
+async function getById(req, res, next) {
   try {
     const id = parseId(req, res);
     if (id === null) return;
-    const review = reviewWorkflowService.getReviewById(id);
+    const review = await reviewWorkflowService.getReviewById(id);
     if (!review) {
       res.status(404).json({ message: 'Review request not found' });
       return;
@@ -36,20 +36,20 @@ function getById(req, res, next) {
   }
 }
 
-function create(req, res, next) {
+async function create(req, res, next) {
   try {
-    const review = reviewWorkflowService.createReview(req.body || {});
+    const review = await reviewWorkflowService.createReview(req.body || {});
     res.status(201).json(review);
   } catch (err) {
     next(err);
   }
 }
 
-function update(req, res, next) {
+async function update(req, res, next) {
   try {
     const id = parseId(req, res);
     if (id === null) return;
-    const review = reviewWorkflowService.updateReview(id, req.body || {});
+    const review = await reviewWorkflowService.updateReview(id, req.body || {});
     if (!review) {
       res.status(404).json({ message: 'Review request not found' });
       return;
@@ -60,11 +60,11 @@ function update(req, res, next) {
   }
 }
 
-function transition(req, res, next) {
+async function transition(req, res, next) {
   try {
     const id = parseId(req, res);
     if (id === null) return;
-    const review = reviewWorkflowService.transitionReview(id, req.body?.status, req.body?.actor);
+    const review = await reviewWorkflowService.transitionReview(id, req.body?.status, req.body?.actor);
     if (!review) {
       res.status(404).json({ message: 'Review request not found' });
       return;
@@ -75,11 +75,11 @@ function transition(req, res, next) {
   }
 }
 
-function comment(req,res,next){try{const id=parseId(req,res);if(id===null)return;const result=reviewWorkflowService.addComment(id,req.body||{});if(!result)return res.status(404).json({message:'Review request not found'});res.status(201).json(result);}catch(err){next(err);}}
-function publish(req,res,next){try{const id=parseId(req,res);if(id===null)return;const result=reviewWorkflowService.publishReview(id);if(!result)return res.status(404).json({message:'Review request not found'});res.json(result);}catch(err){next(err);}}
-function targets(req,res,next){try{res.json(reviewWorkflowService.listTargets(req.query.type));}catch(err){next(err);}}
-function notifications(_req,res,next){try{res.json(reviewWorkflowService.listNotifications());}catch(err){next(err);}}
-function markNotificationRead(req,res,next){try{const id=Number(req.params.notificationId);if(!Number.isInteger(id)||id<=0)return res.status(400).json({message:'Invalid notification id'});const result=reviewWorkflowService.markNotificationRead(id);if(!result)return res.status(404).json({message:'Notification not found'});res.json(result);}catch(err){next(err);}}
-function markAllNotificationsRead(_req,res,next){try{res.json(reviewWorkflowService.markAllNotificationsRead());}catch(err){next(err);}}
+async function comment(req,res,next){try{const id=parseId(req,res);if(id===null)return;const result=await reviewWorkflowService.addComment(id,req.body||{});if(!result)return res.status(404).json({message:'Review request not found'});res.status(201).json(result);}catch(err){next(err);}}
+async function publish(req,res,next){try{const id=parseId(req,res);if(id===null)return;const result=await reviewWorkflowService.publishReview(id);if(!result)return res.status(404).json({message:'Review request not found'});res.json(result);}catch(err){next(err);}}
+async function targets(req,res,next){try{res.json(await reviewWorkflowService.listTargets(req.query.type));}catch(err){next(err);}}
+async function notifications(_req,res,next){try{res.json(await reviewWorkflowService.listNotifications());}catch(err){next(err);}}
+async function markNotificationRead(req,res,next){try{const id=Number(req.params.notificationId);if(!Number.isInteger(id)||id<=0)return res.status(400).json({message:'Invalid notification id'});const result=await reviewWorkflowService.markNotificationRead(id);if(!result)return res.status(404).json({message:'Notification not found'});res.json(result);}catch(err){next(err);}}
+async function markAllNotificationsRead(_req,res,next){try{res.json(await reviewWorkflowService.markAllNotificationsRead());}catch(err){next(err);}}
 
 module.exports = { list, getById, create, update, transition, comment, publish, targets, notifications, markNotificationRead, markAllNotificationsRead };

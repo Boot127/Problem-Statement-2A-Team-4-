@@ -2,7 +2,11 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const env = require('./config/env');
-require('./config/db'); // opens the shared SQLite connection and ensures its schema exists
+// No explicit DB-connection require here: every route below pulls in
+// config/database.js transitively (via its controller -> service ->
+// repository chain), which opens the connection and applies the schema as
+// a side effect of being required — same as it always has, just through
+// one provider-agnostic module now instead of a dedicated require here.
 
 const authRoutes = require('./routes/authRoutes');
 const recordRoutes = require('./routes/recordRoutes');
@@ -10,7 +14,9 @@ const searchRoutes = require('./routes/searchRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const permitRoutes = require('./routes/permitRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 const reviewController = require('./controllers/reviewController');
+const newsletterRoutes = require('./routes/newsletterRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -32,6 +38,9 @@ app.use('/api/v1/audit-logs', auditRoutes);
 app.use('/api/v1/permits', permitRoutes);
 app.use('/api/v1/reviews', reviewRoutes);
 app.get('/api/v1/notifications', reviewController.notifications);
+app.use('/api/v1/newsletters', newsletterRoutes);
+app.use('/uploads/newsletters', express.static(path.join(__dirname, '..', 'uploads', 'newsletters')));
+app.use('/api/v1/admin', adminRoutes);
 
 // Add new feature route mounts ABOVE this line. errorHandler
 // must stay the LAST app.use() call — Express only routes errors to

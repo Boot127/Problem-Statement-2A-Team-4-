@@ -1,77 +1,181 @@
-const db = require('../config/reviewSqliteDb');
+const db = require('../config/database');
 
-function findAll({ search, targetType, status } = {}) {
-  let sql = 'SELECT * FROM review_requests WHERE 1 = 1';
+async function findAll({ search, targetType, status } = {}) {
+  const clauses = [];
   const params = [];
-  if (targetType) { sql += ' AND target_type = ?'; params.push(targetType); }
-  if (status) { sql += ' AND review_status = ?'; params.push(status); }
-  if (search) { sql += ' AND (title LIKE ? OR COALESCE(description, \'\') LIKE ?)'; const q = `%${search}%`; params.push(q, q); }
-  return db.prepare(`${sql} ORDER BY created_at DESC`).all(...params);
+  const bind = (value) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
+  if (targetType) clauses.push(`target_type = ${bind(targetType)}`);
+  if (status) clauses.push(`review_status = ${bind(status)}`);
+  if (search) {
+    const like = bind(`%${search}%`);
+    clauses.push(`(title LIKE ${like} OR COALESCE(description, '') LIKE ${like})`);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  return (await db.query(`SELECT * FROM review_requests ${where} ORDER BY created_at DESC`, params)).rows;
 }
 
-function findById(id) { return db.prepare('SELECT * FROM review_requests WHERE request_id = ?').get(id) || null; }
-function findTarget(type, id) {
-  if (type === 'work_permit') return db.prepare('SELECT * FROM work_permits WHERE permit_id = ?').get(id) || null;
-  const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='compliance_records'").get();
-  if (!table) return null;
-  return db.prepare('SELECT * FROM compliance_records WHERE record_id = ?').get(id) || null;
+async function findById(id) {
+  return (await db.query('SELECT * FROM review_requests WHERE request_id = $1', [id])).rows[0] || null;
 }
-function listTargets(type) {
-  if (type === 'work_permit') return db.prepare("SELECT permit_id AS id, title, status FROM work_permits WHERE status != 'ARCHIVED' ORDER BY title").all();
-  const table = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='compliance_records'").get();
-  if (!table) return [];
-  return db.prepare("SELECT record_id AS id, title, status FROM compliance_records WHERE status != 'ARCHIVED' ORDER BY title").all();
+
+async function findTarget(type, id) {
+  if (type === 'work_permit') {
+    return (await db.query('SELECT * FROM work_permits WHERE permit_id = $1', [id])).rows[0] || null;
+  }
+  return (await db.query('SELECT * FROM compliance_records WHERE record_id = $1', [id])).rows[0] || null;
 }
-function insert(row) {
-  const info = db.prepare(`INSERT INTO review_requests
-    (target_type,target_id,title,description,review_status,submitted_by,submitted_at,created_at,updated_at)
-    VALUES (@target_type,@target_id,@title,@description,@review_status,@submitted_by,@submitted_at,@created_at,@updated_at)`).run(row);
-  return findById(info.lastInsertRowid);
+
+async function listTargets(type) {
+  if (type === 'work_permit') {
+    return (
+      await db.query("SELECT permit_id AS id, title, status FROM work_permits WHERE status != 'ARCHIVED' ORDER BY title")
+    ).rows;
+  }
+  return (
+    await db.query(
+      "SELECT record_id AS id, title, status FROM compliance_records WHERE status != 'ARCHIVED' ORDER BY title"
+    )
+  ).rows;
 }
-function update(id, row) {
-  db.prepare(`UPDATE review_requests SET title=@title, description=@description, updated_at=@updated_at WHERE request_id=@request_id`)
-    .run({ ...row, request_id: id });
+
+async function insert(row) {
+  const result = await db.query(
+    `INSERT INTO review_requests
+      (target_type,target_id,title,description,review_status,submitted_by,submitted_at,created_at,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     RETURNING *`,
+    [
+      row.target_type,
+      row.target_id,
+      row.title,
+      row.description,
+      row.review_status,
+      row.submitted_by,
+      row.submitted_at,
+      row.created_at,
+      row.updated_at,
+    ]
+  );
+  return result.rows[0];
+}
+
+async function update(id, row) {
+  await db.query(
+    'UPDATE review_requests SET title=$1, description=$2, updated_at=$3 WHERE request_id=$4',
+    [row.title, row.description, row.updated_at, id]
+  );
   return findById(id);
 }
-function transition(id, status, actor, now) {
-  db.prepare(`UPDATE review_requests SET review_status=?, reviewed_by=?, reviewed_at=?, updated_at=? WHERE request_id=?`)
-    .run(status, actor, ['APPROVED','REJECTED','CHANGES_REQUESTED'].includes(status) ? now : null, now, id);
+
+async function transition(id, status, actor, now) {
+  if (status === 'ARCHIVED') {
+    await db.query(
+      `UPDATE review_requests SET
+        previous_status=CASE WHEN review_status!='ARCHIVED' THEN review_status ELSE previous_status END,
+        review_status='ARCHIVED', archived_at=$1, reviewed_by=$2, updated_at=$3
+       WHERE request_id=$4`,
+      [now, actor, now, id]
+    );
+  } else {
+    await db.query(
+      'UPDATE review_requests SET review_status=$1, reviewed_by=$2, reviewed_at=$3, updated_at=$4 WHERE request_id=$5',
+      [status, actor, ['APPROVED', 'REJECTED', 'CHANGES_REQUESTED'].includes(status) ? now : null, now, id]
+    );
+  }
   return findById(id);
 }
-function addComment(id, author, comment, now) {
-  const info = db.prepare('INSERT INTO review_comments (request_id,author_name,comment,created_at) VALUES (?,?,?,?)').run(id, author, comment, now);
-  return db.prepare('SELECT * FROM review_comments WHERE comment_id=?').get(info.lastInsertRowid);
+
+async function addComment(id, author, comment, now) {
+  const result = await db.query(
+    'INSERT INTO review_comments (request_id,author_name,comment,created_at) VALUES ($1,$2,$3,$4) RETURNING *',
+    [id, author, comment, now]
+  );
+  return result.rows[0];
 }
-function comments(id) { return db.prepare('SELECT * FROM review_comments WHERE request_id=? ORDER BY created_at ASC').all(id); }
-function notify(id, message, now) { db.prepare('INSERT INTO notifications (request_id,message,created_at) VALUES (?,?,?)').run(id, message, now); }
-function notifications() { return db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100').all(); }
-function findNotification(id) { return db.prepare('SELECT * FROM notifications WHERE notification_id=?').get(id) || null; }
-function markNotificationRead(id) {
-  db.prepare('UPDATE notifications SET is_read=1 WHERE notification_id=?').run(id);
+
+async function comments(id) {
+  return (await db.query('SELECT * FROM review_comments WHERE request_id=$1 ORDER BY created_at ASC', [id])).rows;
+}
+
+async function notify(id, message, now) {
+  await db.query('INSERT INTO notifications (request_id,message,created_at) VALUES ($1,$2,$3)', [id, message, now]);
+}
+
+async function notifications() {
+  return (await db.query('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100')).rows;
+}
+
+async function findNotification(id) {
+  return (await db.query('SELECT * FROM notifications WHERE notification_id=$1', [id])).rows[0] || null;
+}
+
+async function markNotificationRead(id) {
+  await db.query('UPDATE notifications SET is_read=$1 WHERE notification_id=$2', [true, id]);
   return findNotification(id);
 }
-function markAllNotificationsRead() {
-  db.prepare('UPDATE notifications SET is_read=1 WHERE is_read=0').run();
+
+async function markAllNotificationsRead() {
+  await db.query('UPDATE notifications SET is_read=$1 WHERE is_read=$2', [true, false]);
   return notifications();
 }
-function versions(type, id) { return db.prepare('SELECT * FROM record_versions WHERE target_type=? AND target_id=? ORDER BY version DESC').all(type,id); }
 
-function publish(review, now) {
-  return db.transaction(() => {
-    const target = findTarget(review.target_type, review.target_id);
-    if (!target) return null;
-    const previous = db.prepare('SELECT MAX(version) AS version FROM record_versions WHERE target_type=? AND target_id=?').get(review.target_type, review.target_id);
-    const version = Math.max(previous.version || 0, Number(target.version) || 0) + 1;
-    db.prepare('INSERT INTO record_versions (target_type,target_id,version,snapshot,published_at,review_id) VALUES (?,?,?,?,?,?)')
-      .run(review.target_type, review.target_id, version, JSON.stringify(target), now, review.request_id);
-    if (review.target_type === 'work_permit') {
-      db.prepare("UPDATE work_permits SET status='PUBLISHED', version=?, updated_at=? WHERE permit_id=?").run(version, now, review.target_id);
-    } else {
-      db.prepare("UPDATE compliance_records SET status='PUBLISHED', version=?, updated_at=? WHERE record_id=?").run(version, now, review.target_id);
-    }
-    db.prepare('UPDATE review_requests SET published_at=?, updated_at=? WHERE request_id=?').run(now, now, review.request_id);
-    return { version, snapshot: target };
-  })();
+async function versions(type, id) {
+  return (
+    await db.query('SELECT * FROM record_versions WHERE target_type=$1 AND target_id=$2 ORDER BY version DESC', [type, id])
+  ).rows;
 }
 
-module.exports = { findAll, findById, findTarget, listTargets, insert, update, transition, addComment, comments, notify, notifications, findNotification, markNotificationRead, markAllNotificationsRead, versions, publish };
+async function publish(review, now) {
+  return db.transaction(async () => {
+    const target = await findTarget(review.target_type, review.target_id);
+    if (!target) return null;
+    const previous = (
+      await db.query(
+        'SELECT MAX(version) AS version FROM record_versions WHERE target_type=$1 AND target_id=$2',
+        [review.target_type, review.target_id]
+      )
+    ).rows[0];
+    const version = Math.max(Number(previous.version) || 0, Number(target.version) || 0) + 1;
+    await db.query(
+      'INSERT INTO record_versions (target_type,target_id,version,snapshot,published_at,review_id) VALUES ($1,$2,$3,$4,$5,$6)',
+      [review.target_type, review.target_id, version, JSON.stringify(target), now, review.request_id]
+    );
+    if (review.target_type === 'work_permit') {
+      await db.query("UPDATE work_permits SET status='PUBLISHED', version=$1, updated_at=$2 WHERE permit_id=$3", [
+        version,
+        now,
+        review.target_id,
+      ]);
+    } else {
+      await db.query("UPDATE compliance_records SET status='PUBLISHED', version=$1, updated_at=$2 WHERE record_id=$3", [
+        version,
+        now,
+        review.target_id,
+      ]);
+    }
+    await db.query('UPDATE review_requests SET published_at=$1, updated_at=$2 WHERE request_id=$3', [now, now, review.request_id]);
+    return { version, snapshot: target };
+  });
+}
+
+module.exports = {
+  findAll,
+  findById,
+  findTarget,
+  listTargets,
+  insert,
+  update,
+  transition,
+  addComment,
+  comments,
+  notify,
+  notifications,
+  findNotification,
+  markNotificationRead,
+  markAllNotificationsRead,
+  versions,
+  publish,
+};
