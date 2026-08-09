@@ -62,9 +62,9 @@ export default function RecordFormPage() {
     }
   };
 
-  const handleAiRewriteRequest = async (field, text) => {
+  const handleAiRewriteRequest = async (field, text, mode) => {
     if (!id) return null;
-    return recordService.aiAssist(id, { mode: 'rewrite', field, text });
+    return recordService.aiAssist(id, { mode: mode || 'rewrite', field, text });
   };
 
   if (!canEdit) {

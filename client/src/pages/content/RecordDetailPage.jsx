@@ -30,6 +30,8 @@ import LaunchOutlinedIcon from '@mui/icons-material/LaunchOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import AddIcon from '@mui/icons-material/Add';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlined';
 import PageHeader from '../../components/common/PageHeader';
 import AppBreadcrumbs from '../../components/common/AppBreadcrumbs';
 import StatusChip from '../../components/common/StatusChip';
@@ -37,6 +39,7 @@ import WorkerTypeChip from '../../components/common/WorkerTypeChip';
 import VisibilityBadge from '../../components/common/VisibilityBadge';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import recordService from '../../api/recordService';
+import reviewService from '../../api/reviewService';
 import { apiOrigin } from '../../api/axiosClient';
 import { countryName } from '../../utils/countries';
 import {
@@ -105,11 +108,21 @@ export default function RecordDetailPage() {
   const [uploading, setUploading] = useState(false);
   const [componentDialogOpen, setComponentDialogOpen] = useState(false);
   const [componentDraft, setComponentDraft] = useState(emptyComponent);
+  const [editingComponentId, setEditingComponentId] = useState(null);
   const [savingComponent, setSavingComponent] = useState(false);
+  const [deleteComponentTarget, setDeleteComponentTarget] = useState(null);
+  const [deleteAttachmentTarget, setDeleteAttachmentTarget] = useState(null);
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [reviewError, setReviewError] = useState(null);
+  const [versions, setVersions] = useState([]);
   const fileInputRef = useRef(null);
 
   const load = () => {
     recordService.getById(id).then(setRecord);
+    recordService
+      .listVersions(id)
+      .then(setVersions)
+      .catch(() => setVersions([]));
   };
 
   useEffect(() => {
@@ -148,6 +161,28 @@ export default function RecordDetailPage() {
     });
   };
 
+  // Shortcut that wraps this record in a review request (HLD Section 5.2:
+  // "Developer 3's workflow wraps the content produced by Developers 1 and
+  // 2") instead of sending the user to Review & Approval to look the record
+  // up manually. Publishing (DRAFT -> PUBLISHED) only happens once that
+  // request is approved and published there — this just starts it.
+  const handleSubmitForReview = async () => {
+    setReviewError(null);
+    setSubmittingReview(true);
+    try {
+      const review = await reviewService.create({
+        targetType: 'compliance_record',
+        targetId: record.id,
+        title: `Review: ${record.title}`,
+        description: '',
+      });
+      navigate(`/reviews/${review.id}`);
+    } catch (err) {
+      setReviewError(err.response?.data?.message || 'Could not submit this record for review.');
+      setSubmittingReview(false);
+    }
+  };
+
   const handleFileSelected = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
@@ -171,18 +206,57 @@ export default function RecordDetailPage() {
     }
   };
 
+  const openAddComponent = () => {
+    setEditingComponentId(null);
+    setComponentDraft(emptyComponent);
+    setComponentDialogOpen(true);
+  };
+
+  const openEditComponent = (component) => {
+    setEditingComponentId(component.id);
+    setComponentDraft({
+      componentName: component.componentName || '',
+      workerType: component.workerType || 'ALL_EMPLOYEES',
+      employerRate: component.employerRate || '',
+      employeeRate: component.employeeRate || '',
+      capCeiling: component.capCeiling || '',
+      calculationBasis: component.calculationBasis || '',
+      notes: component.notes || '',
+    });
+    setComponentDialogOpen(true);
+  };
+
   const handleSaveComponent = async () => {
     setSavingComponent(true);
     try {
-      await recordService.addComponent(record.id, componentDraft);
+      if (editingComponentId) {
+        await recordService.updateComponent(record.id, editingComponentId, componentDraft);
+      } else {
+        await recordService.addComponent(record.id, componentDraft);
+      }
       setComponentDialogOpen(false);
       setComponentDraft(emptyComponent);
+      setEditingComponentId(null);
       load();
     } catch (err) {
-      setUploadError(err.response?.data?.message || 'Could not add benefit component.');
+      setUploadError(err.response?.data?.message || 'Could not save benefit component.');
     } finally {
       setSavingComponent(false);
     }
+  };
+
+  const handleRemoveComponent = async () => {
+    if (!deleteComponentTarget) return;
+    await recordService.removeComponent(record.id, deleteComponentTarget.id);
+    setDeleteComponentTarget(null);
+    load();
+  };
+
+  const handleRemoveAttachment = async () => {
+    if (!deleteAttachmentTarget) return;
+    await recordService.removeAttachment(record.id, deleteAttachmentTarget.id);
+    setDeleteAttachmentTarget(null);
+    load();
   };
 
   return (
@@ -208,6 +282,17 @@ export default function RecordDetailPage() {
               >
                 Edit
               </Button>
+              {record.status === 'DRAFT' && (
+                <Button
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<RateReviewOutlinedIcon />}
+                  disabled={submittingReview}
+                  onClick={handleSubmitForReview}
+                >
+                  {submittingReview ? 'Submitting…' : 'Submit for Review'}
+                </Button>
+              )}
               <Button
                 variant="outlined"
                 color="error"
@@ -221,6 +306,12 @@ export default function RecordDetailPage() {
           )
         }
       />
+
+      {reviewError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setReviewError(null)}>
+          {reviewError}
+        </Alert>
+      )}
 
       <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
         <StatusChip status={record.status} />
@@ -255,7 +346,7 @@ export default function RecordDetailPage() {
             Benefit Components
           </Typography>
           {canEdit && (
-            <Button size="small" startIcon={<AddIcon />} onClick={() => setComponentDialogOpen(true)}>
+            <Button size="small" startIcon={<AddIcon />} onClick={openAddComponent}>
               Add Component
             </Button>
           )}
@@ -273,6 +364,21 @@ export default function RecordDetailPage() {
                     {component.componentName}
                   </Typography>
                   <WorkerTypeChip workerType={component.workerType} />
+                  <Box sx={{ flexGrow: 1 }} />
+                  {canEdit && (
+                    <>
+                      <Tooltip title="Edit component">
+                        <IconButton size="small" onClick={() => openEditComponent(component)}>
+                          <EditOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete component">
+                        <IconButton size="small" onClick={() => setDeleteComponentTarget(component)}>
+                          <DeleteOutlineIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </>
+                  )}
                 </Stack>
                 <Box
                   sx={{
@@ -374,6 +480,49 @@ export default function RecordDetailPage() {
                     <DownloadOutlinedIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
+                {canEdit && (
+                  <Tooltip title="Delete attachment">
+                    <IconButton size="small" onClick={() => setDeleteAttachmentTarget(attachment)}>
+                      <DeleteOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </Stack>
+            ))}
+          </Stack>
+        )}
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+        <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1.5 }}>
+          Version History
+        </Typography>
+        {versions.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No published versions yet. A version is captured each time a review request for this record is
+            published.
+          </Typography>
+        ) : (
+          <Stack spacing={1}>
+            {versions.map((v) => (
+              <Stack
+                key={v.id}
+                direction="row"
+                spacing={1.5}
+                sx={{ alignItems: 'center', py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
+              >
+                <Typography variant="body2" fontWeight={600} sx={{ minWidth: 48 }}>
+                  v{v.version}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Published {v.publishedAt ? new Date(v.publishedAt).toLocaleString() : '—'}
+                </Typography>
+                <Box sx={{ flexGrow: 1 }} />
+                {v.reviewId && (
+                  <Button size="small" component={RouterLink} to={`/reviews/${v.reviewId}`}>
+                    View Review
+                  </Button>
+                )}
               </Stack>
             ))}
           </Stack>
@@ -414,8 +563,36 @@ export default function RecordDetailPage() {
         onCancel={() => setConfirmArchive(false)}
       />
 
-      <Dialog open={componentDialogOpen} onClose={() => setComponentDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Benefit Component</DialogTitle>
+      <ConfirmDialog
+        open={Boolean(deleteComponentTarget)}
+        title="Delete benefit component?"
+        message={`"${deleteComponentTarget?.componentName || ''}" will be permanently removed from this record.`}
+        confirmLabel="Delete Component"
+        confirmColor="error"
+        onConfirm={handleRemoveComponent}
+        onCancel={() => setDeleteComponentTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteAttachmentTarget)}
+        title="Delete attachment?"
+        message={`"${deleteAttachmentTarget?.fileName || ''}" will be permanently removed from this record.`}
+        confirmLabel="Delete Attachment"
+        confirmColor="error"
+        onConfirm={handleRemoveAttachment}
+        onCancel={() => setDeleteAttachmentTarget(null)}
+      />
+
+      <Dialog
+        open={componentDialogOpen}
+        onClose={() => {
+          setComponentDialogOpen(false);
+          setEditingComponentId(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>{editingComponentId ? 'Edit Benefit Component' : 'Add Benefit Component'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
@@ -480,13 +657,20 @@ export default function RecordDetailPage() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setComponentDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              setComponentDialogOpen(false);
+              setEditingComponentId(null);
+            }}
+          >
+            Cancel
+          </Button>
           <Button
             variant="contained"
             disabled={savingComponent || !componentDraft.componentName.trim()}
             onClick={handleSaveComponent}
           >
-            Add
+            {savingComponent ? 'Saving…' : editingComponentId ? 'Save' : 'Add'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -1,6 +1,7 @@
 // Dev 1 — compliance_records request handlers (mirrors recordRoutes.js).
 
 const path = require('path');
+const fs = require('fs');
 const complianceContentService = require('../services/complianceContentService');
 
 function list(req, res) {
@@ -54,4 +55,49 @@ async function aiAssist(req, res) {
   res.json({ data: result });
 }
 
-module.exports = { list, getById, create, update, archive, addComponent, addAttachment, aiAssist };
+function listVersions(req, res) {
+  const versions = complianceContentService.listVersions(Number(req.params.id), req.user);
+  res.json({ data: versions });
+}
+
+function updateComponent(req, res) {
+  const component = complianceContentService.updateComponent(
+    Number(req.params.id),
+    Number(req.params.componentId),
+    req.body,
+    req.user
+  );
+  res.json({ data: component });
+}
+
+function removeComponent(req, res) {
+  complianceContentService.removeComponent(Number(req.params.id), Number(req.params.componentId), req.user);
+  res.status(204).end();
+}
+
+function removeAttachment(req, res) {
+  const deleted = complianceContentService.removeAttachment(
+    Number(req.params.id),
+    Number(req.params.attachmentId),
+    req.user
+  );
+  // Best-effort disk cleanup — the DB row is already gone either way, so a
+  // missing/already-removed file must never turn this into a failed request.
+  fs.unlink(path.join(__dirname, '..', '..', deleted.filePath), () => {});
+  res.status(204).end();
+}
+
+module.exports = {
+  list,
+  getById,
+  create,
+  update,
+  archive,
+  addComponent,
+  updateComponent,
+  removeComponent,
+  addAttachment,
+  removeAttachment,
+  aiAssist,
+  listVersions,
+};

@@ -206,6 +206,38 @@ function addComponent(recordId, data) {
   return serializeComponent(db.prepare('SELECT * FROM benefit_components WHERE component_id = ?').get(info.lastInsertRowid));
 }
 
+function getComponent(componentId) {
+  const row = db.prepare('SELECT * FROM benefit_components WHERE component_id = ?').get(componentId);
+  return row ? serializeComponent(row) : null;
+}
+
+function updateComponent(componentId, data) {
+  db.prepare(
+    `UPDATE benefit_components SET
+       component_name = ?, worker_type = ?, employer_rate = ?, employee_rate = ?,
+       cap_ceiling = ?, calculation_basis = ?, notes = ?
+     WHERE component_id = ?`
+  ).run(
+    data.componentName,
+    data.workerType || 'ALL_EMPLOYEES',
+    data.employerRate || null,
+    data.employeeRate || null,
+    data.capCeiling || null,
+    data.calculationBasis || null,
+    data.notes || null,
+    componentId
+  );
+  return getComponent(componentId);
+}
+
+function removeComponent(componentId) {
+  db.prepare('DELETE FROM benefit_components WHERE component_id = ?').run(componentId);
+}
+
+function removeAttachment(attachmentId) {
+  db.prepare('DELETE FROM record_attachments WHERE attachment_id = ?').run(attachmentId);
+}
+
 function addAttachment(recordId, data, userId) {
   const info = db
     .prepare(
@@ -220,6 +252,29 @@ function addAttachment(recordId, data, userId) {
 
 function exists(id) {
   return Boolean(db.prepare('SELECT 1 FROM compliance_records WHERE record_id = ?').get(id));
+}
+
+// record_versions is written by the review workflow's publish action (Dev
+// 3 — server/src/repositories/reviewRepository.js `publish()`), which
+// already handles compliance_record as a target_type generically. This is a
+// read-only view of that table from the Compliance Content side.
+function serializeVersion(row) {
+  return {
+    id: row.version_id,
+    version: row.version,
+    publishedAt: row.published_at,
+    reviewId: row.review_id,
+    snapshot: JSON.parse(row.snapshot),
+  };
+}
+
+function findVersions(recordId) {
+  return db
+    .prepare(
+      `SELECT * FROM record_versions WHERE target_type = 'compliance_record' AND target_id = ? ORDER BY version DESC`
+    )
+    .all(recordId)
+    .map(serializeVersion);
 }
 
 // Case-insensitive match on country + title + effective date, used to catch
@@ -248,5 +303,9 @@ module.exports = {
   addAttachment,
   exists,
   findDuplicate,
+  findVersions,
+  updateComponent,
+  removeComponent,
+  removeAttachment,
   serializeRecord,
 };

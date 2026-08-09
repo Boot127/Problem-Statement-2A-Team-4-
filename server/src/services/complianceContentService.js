@@ -97,6 +97,11 @@ function archive(id, user) {
   return updated;
 }
 
+function listVersions(recordId, user) {
+  getById(recordId, user); // 404s if missing or not visible to this role
+  return recordRepository.findVersions(recordId);
+}
+
 function addComponent(recordId, payload, user) {
   const existing = getById(recordId, user);
   if (existing.status === 'ARCHIVED') {
@@ -132,6 +137,74 @@ function addAttachment(recordId, fileMeta, user) {
   return attachment;
 }
 
+function updateComponent(recordId, componentId, payload, user) {
+  const record = getById(recordId, user);
+  if (record.status === 'ARCHIVED') {
+    throw httpError(409, 'Archived records cannot be edited.');
+  }
+  const existing = record.benefitComponents.find((c) => c.id === componentId);
+  if (!existing) {
+    throw httpError(404, 'Benefit component not found on this record.');
+  }
+  if (!payload.componentName) {
+    throw httpError(400, 'componentName is required');
+  }
+  const updated = recordRepository.updateComponent(componentId, payload);
+  auditService.log({
+    userId: user.id,
+    action: 'update',
+    entityType: 'benefit_component',
+    entityId: componentId,
+    oldValue: existing,
+    newValue: updated,
+  });
+  return updated;
+}
+
+function removeComponent(recordId, componentId, user) {
+  const record = getById(recordId, user);
+  if (record.status === 'ARCHIVED') {
+    throw httpError(409, 'Archived records cannot be edited.');
+  }
+  const existing = record.benefitComponents.find((c) => c.id === componentId);
+  if (!existing) {
+    throw httpError(404, 'Benefit component not found on this record.');
+  }
+  recordRepository.removeComponent(componentId);
+  auditService.log({
+    userId: user.id,
+    action: 'update',
+    entityType: 'benefit_component',
+    entityId: componentId,
+    oldValue: existing,
+    newValue: null,
+  });
+}
+
+// Returns the deleted attachment's metadata (filePath in particular) so the
+// controller can also remove the file from disk — the service layer stays
+// storage-agnostic and doesn't touch the filesystem itself.
+function removeAttachment(recordId, attachmentId, user) {
+  const record = getById(recordId, user);
+  if (record.status === 'ARCHIVED') {
+    throw httpError(409, 'Archived records cannot be edited.');
+  }
+  const existing = record.attachments.find((a) => a.id === attachmentId);
+  if (!existing) {
+    throw httpError(404, 'Attachment not found on this record.');
+  }
+  recordRepository.removeAttachment(attachmentId);
+  auditService.log({
+    userId: user.id,
+    action: 'update',
+    entityType: 'record_attachment',
+    entityId: attachmentId,
+    oldValue: existing,
+    newValue: null,
+  });
+  return existing;
+}
+
 // FR-1.6 / Section 16.1: the assistant only ever returns a suggestion. It
 // never writes to the record — accepting a suggestion is just a normal
 // PUT /records/:id from the client with the edited text.
@@ -153,6 +226,10 @@ module.exports = {
   update,
   archive,
   addComponent,
+  updateComponent,
+  removeComponent,
   addAttachment,
+  removeAttachment,
   aiAssist,
+  listVersions,
 };

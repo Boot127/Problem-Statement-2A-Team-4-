@@ -11,19 +11,33 @@ working SQLite backend before this was merged in.
 
 - **Shared foundation + Dev 1 (Compliance Content):** `countries`, `users`,
   `compliance_records`, `benefit_components`, `record_attachments`,
-  `audit_logs` — `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`,
+  `record_versions` (read-only from this side), `audit_logs` —
+  `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`,
   `GET/POST /records`, `GET/PUT /records/:id`, `PATCH /records/:id/archive`,
-  `POST /records/:id/components`, `POST /records/:id/attachments`,
-  `POST /records/:id/ai-assist`, `GET /search`, `GET /audit-logs`.
+  `GET /records/:id/versions`,
+  `POST /records/:id/components`, `PUT/DELETE /records/:id/components/:componentId`,
+  `POST /records/:id/attachments`, `DELETE /records/:id/attachments/:attachmentId`,
+  `POST /records/:id/ai-assist` (modes: `grammar`, `rewrite`, `summarise`,
+  `translate`), `GET /search`, `GET /audit-logs`.
 - **Dev 2 (Work Permit Management):** `work_permits` — `GET/POST /permits`,
   `GET/PUT /permits/:id`, `PATCH /permits/:id/archive`. Not yet behind auth
   (no `auth`/`authorize` middleware applied to `permitRoutes.js`) — that's
   Dev 2's call to make, not changed here.
-- `review_requests` (Dev 3) and `newsletters`/`detected_updates` (Dev 4) are
-  **not built** — their route/controller/service/repository files are still
-  the original TODO stubs and aren't mounted in `app.js`. (Dev 4 has a
-  client-only newsletters page under `client/src/features/newsletters/`
-  with no backend behind it yet.)
+- **Dev 3 (Review & Approval):** `review_requests`, `review_comments`,
+  `notifications` — `GET/POST /reviews`, `GET/PUT /reviews/:id`,
+  `PATCH /reviews/:id/transition`, `POST /reviews/:id/comments`,
+  `POST /reviews/:id/publish`. Generic over `target_type`
+  (`compliance_record` | `work_permit`); publishing writes a
+  `record_versions`/`permit_versions` snapshot and flips the target's
+  `status` to `PUBLISHED`. The Compliance Content detail page has a
+  "Submit for Review" shortcut on `DRAFT` records that creates a review
+  targeting it directly, and displays the resulting version history once
+  published.
+- `newsletters`/`detected_updates` (Dev 4) are **not built** — their
+  route/controller/service/repository files are still the original TODO
+  stubs and aren't mounted in `app.js`. (Dev 4 has a client-only newsletters
+  page under `client/src/features/newsletters/` with no backend behind it
+  yet.)
 
 ## One shared SQLite database, two connections
 
@@ -65,18 +79,31 @@ location, so there's exactly one database file, not two.
    directly, no FK — a deliberate simplification since a shared countries
    table was "out of scope" for that feature alone), `compliance_records`
    uses a real normalized `countries` table with a FK, since a shared
-   foundation now genuinely exists. Editing an existing benefit component
-   isn't possible from the UI, matching the API, which only supports adding
-   one (`POST /records/:id/components`).
-4. **No `record_versions` table yet.** Per Section 12.2, a version snapshot
-   is only written when an *approved review* is published (FR-3.5), which is
-   Developer 3's review-workflow feature. Nothing populates `record_versions`
-   without that workflow existing, so the table is deferred rather than
-   built empty.
-5. **`PUBLISHED` status is not reachable from the compliance-records API.**
-   Create always starts a record as `DRAFT`; update never changes `status`;
-   the only other transition is `PATCH /records/:id/archive`. Publishing is
-   exclusively Developer 3's action once the review workflow exists.
+   foundation now genuinely exists. Benefit components can now be edited and
+   removed (`PUT`/`DELETE /records/:id/components/:componentId`), not just
+   added — the update/delete services always resolve the parent record via
+   `getById` first, both to enforce visibility and to confirm the component
+   actually belongs to that record before mutating it (a mismatched
+   `:id`/`:componentId` pair 404s rather than touching the wrong record's
+   data). Attachments got the same treatment: `DELETE
+   /records/:id/attachments/:attachmentId` removes the DB row and does a
+   best-effort delete of the file on disk (a missing file never fails the
+   request — the DB row is the source of truth).
+4. **`record_versions` is populated by Developer 3's review workflow, read
+   by Developer 1's side.** Per Section 12.2, a version snapshot is written
+   when an *approved review* is published (FR-3.5) — that write lives in
+   `reviewRepository.js#publish()`, generic over `target_type`. Compliance
+   Content only reads it back (`recordRepository.js#findVersions`, exposed
+   as `GET /records/:id/versions`) and renders it as a version-history panel
+   on the record detail page.
+5. **`PUBLISHED` is now reachable, but only via the review workflow.**
+   Create always starts a record as `DRAFT`; `PUT /records/:id` never
+   changes `status`; `PATCH /records/:id/archive` is the only direct
+   transition on the records API itself. Reaching `PUBLISHED` requires
+   going through Developer 3's review workflow (`POST /reviews` with
+   `targetType: 'compliance_record'` → transition to `APPROVED` →
+   `POST /reviews/:id/publish`), which the record detail page's "Submit for
+   Review" button starts for `DRAFT` records.
 6. **AI provider is Groq, not Anthropic Claude.** Section 16 names Claude
    specifically, but it has no ongoing free tier (billing required); Groq's
    API is free (no credit card) and OpenAI-compatible. See
@@ -162,7 +189,7 @@ curl http://localhost:5000/api/v1/permits
 
 ## What's still a TODO stub
 
-`reviewController.js`/`reviewRepository.js`/`reviewRoutes.js`,
 `newsletterController.js`/`newsletterRepository.js`/`newsletterRoutes.js`,
-`reviewWorkflowService.js`, `newsletterUpdateService.js` — untouched, for
-Developers 3 and 4.
+`newsletterUpdateService.js` — untouched, for Developer 4.
+Developer 3's review workflow (`reviewController.js`/`reviewRepository.js`/
+`reviewRoutes.js`/`reviewWorkflowService.js`) is implemented and mounted.
