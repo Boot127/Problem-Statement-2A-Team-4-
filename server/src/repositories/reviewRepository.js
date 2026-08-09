@@ -45,6 +45,15 @@ function addComment(id, author, comment, now) {
 function comments(id) { return db.prepare('SELECT * FROM review_comments WHERE request_id=? ORDER BY created_at ASC').all(id); }
 function notify(id, message, now) { db.prepare('INSERT INTO notifications (request_id,message,created_at) VALUES (?,?,?)').run(id, message, now); }
 function notifications() { return db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100').all(); }
+function findNotification(id) { return db.prepare('SELECT * FROM notifications WHERE notification_id=?').get(id) || null; }
+function markNotificationRead(id) {
+  db.prepare('UPDATE notifications SET is_read=1 WHERE notification_id=?').run(id);
+  return findNotification(id);
+}
+function markAllNotificationsRead() {
+  db.prepare('UPDATE notifications SET is_read=1 WHERE is_read=0').run();
+  return notifications();
+}
 function versions(type, id) { return db.prepare('SELECT * FROM record_versions WHERE target_type=? AND target_id=? ORDER BY version DESC').all(type,id); }
 
 function publish(review, now) {
@@ -52,7 +61,7 @@ function publish(review, now) {
     const target = findTarget(review.target_type, review.target_id);
     if (!target) return null;
     const previous = db.prepare('SELECT MAX(version) AS version FROM record_versions WHERE target_type=? AND target_id=?').get(review.target_type, review.target_id);
-    const version = (previous.version || 0) + 1;
+    const version = Math.max(previous.version || 0, Number(target.version) || 0) + 1;
     db.prepare('INSERT INTO record_versions (target_type,target_id,version,snapshot,published_at,review_id) VALUES (?,?,?,?,?,?)')
       .run(review.target_type, review.target_id, version, JSON.stringify(target), now, review.request_id);
     if (review.target_type === 'work_permit') {
@@ -65,4 +74,4 @@ function publish(review, now) {
   })();
 }
 
-module.exports = { findAll, findById, findTarget, listTargets, insert, update, transition, addComment, comments, notify, notifications, versions, publish };
+module.exports = { findAll, findById, findTarget, listTargets, insert, update, transition, addComment, comments, notify, notifications, findNotification, markNotificationRead, markAllNotificationsRead, versions, publish };

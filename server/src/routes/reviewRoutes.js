@@ -3,10 +3,12 @@ const reviewController = require('../controllers/reviewController');
 
 const router = express.Router();
 
-// Dev 3 — review_requests CRUD (Section 14.4). Transitions, publish,
-// comments, and notifications are out of scope for this basic CRUD pass.
+// Dev 3 — complete review workflow, publishing, comments, versions, and notifications.
 router.get('/', reviewController.list);
 router.get('/targets/options', reviewController.targets);
+router.get('/notifications', reviewController.notifications);
+router.patch('/notifications/read-all', reviewController.markAllNotificationsRead);
+router.patch('/notifications/:notificationId/read', reviewController.markNotificationRead);
 router.get('/:id', reviewController.getById);
 router.post('/', reviewController.create);
 router.put('/:id', reviewController.update);

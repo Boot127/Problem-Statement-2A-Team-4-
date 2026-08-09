@@ -21,6 +21,8 @@ import {
   Stack,
   Avatar,
   Divider,
+  Alert,
+  CircularProgress,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import FilterAltOutlinedIcon from '@mui/icons-material/FilterAltOutlined';
@@ -37,6 +39,7 @@ import AppBreadcrumbs from '../../components/common/AppBreadcrumbs';
 import StatusChip from '../../components/common/StatusChip';
 import ConfirmDialog from '../../components/common/ConfirmDialog';
 import reviewService from '../../api/reviewService';
+import ReviewNotifications from './ReviewNotifications';
 import { REVIEW_STATUSES, REVIEW_STATUS_LABELS, TARGET_TYPES, TARGET_TYPE_LABELS } from '../../utils/enums';
 
 const SUMMARY_CARD_CONFIG = [
@@ -56,15 +59,29 @@ export default function ReviewsPage() {
   const [archiveTarget, setArchiveTarget] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [error, setError] = useState('');
+  const [archiving, setArchiving] = useState(false);
 
-  const fetchReviews = () =>
-    reviewService.list().then((data) => {
+  const fetchReviews = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await reviewService.list();
       setReviews(data);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not load review requests.');
+    } finally {
       setLoading(false);
-    });
+    }
+  };
 
   useEffect(() => {
-    fetchReviews();
+    let active = true;
+    reviewService.list()
+      .then((data) => { if (active) setReviews(data); })
+      .catch((err) => { if (active) setError(err.response?.data?.message || 'Could not load review requests.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, []);
 
   const filtered = useMemo(() => {
@@ -73,7 +90,9 @@ export default function ReviewsPage() {
     if (status) result = result.filter((r) => r.reviewStatus === status);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
-      result = result.filter((r) => r.title.toLowerCase().includes(q));
+      result = result.filter((r) =>
+        r.title.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q)
+      );
     }
     return result;
   }, [reviews, search, targetType, status]);
@@ -110,12 +129,19 @@ export default function ReviewsPage() {
     setStatus('');
   };
 
-  const handleConfirmArchive = () => {
-    if (!archiveTarget) return;
-    reviewService.archive(archiveTarget.id).then(() => {
+  const handleConfirmArchive = async () => {
+    if (!archiveTarget || archiving) return;
+    setArchiving(true);
+    setError('');
+    try {
+      await reviewService.archive(archiveTarget.id);
       setArchiveTarget(null);
-      fetchReviews();
-    });
+      await fetchReviews();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not archive the review request.');
+    } finally {
+      setArchiving(false);
+    }
   };
 
   return (
@@ -125,16 +151,15 @@ export default function ReviewsPage() {
       <PageHeader
         title="Review & Approval Workflow"
         subtitle="Create, view, update, and archive review requests."
-        actions={
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => navigate('/reviews/new')}
-          >
+        actions={<Stack direction="row" spacing={1} alignItems="center">
+          <ReviewNotifications />
+          <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/reviews/new')}>
             New Review Request
           </Button>
-        }
+        </Stack>}
       />
+
+      {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>{error}</Alert>}
 
       <Box
         sx={{
@@ -175,7 +200,7 @@ export default function ReviewsPage() {
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           <TextField
             label="Search"
-            placeholder="Search by title"
+            placeholder="Search by title or description"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             fullWidth
@@ -230,6 +255,9 @@ export default function ReviewsPage() {
             </TableRow>
           </TableHead>
           <TableBody>
+            {loading && (
+              <TableRow><TableCell colSpan={4} align="center"><CircularProgress size={28} sx={{ my: 4 }} /></TableCell></TableRow>
+            )}
             {!loading && filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={4}>

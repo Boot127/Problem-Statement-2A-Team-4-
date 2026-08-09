@@ -79,5 +79,7 @@ function comment(req,res,next){try{const id=parseId(req,res);if(id===null)return
 function publish(req,res,next){try{const id=parseId(req,res);if(id===null)return;const result=reviewWorkflowService.publishReview(id);if(!result)return res.status(404).json({message:'Review request not found'});res.json(result);}catch(err){next(err);}}
 function targets(req,res,next){try{res.json(reviewWorkflowService.listTargets(req.query.type));}catch(err){next(err);}}
 function notifications(_req,res,next){try{res.json(reviewWorkflowService.listNotifications());}catch(err){next(err);}}
+function markNotificationRead(req,res,next){try{const id=Number(req.params.notificationId);if(!Number.isInteger(id)||id<=0)return res.status(400).json({message:'Invalid notification id'});const result=reviewWorkflowService.markNotificationRead(id);if(!result)return res.status(404).json({message:'Notification not found'});res.json(result);}catch(err){next(err);}}
+function markAllNotificationsRead(_req,res,next){try{res.json(reviewWorkflowService.markAllNotificationsRead());}catch(err){next(err);}}
 
-module.exports = { list, getById, create, update, transition, comment, publish, targets, notifications };
+module.exports = { list, getById, create, update, transition, comment, publish, targets, notifications, markNotificationRead, markAllNotificationsRead };
