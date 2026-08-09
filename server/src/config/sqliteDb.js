@@ -1,7 +1,11 @@
-// SQLite connection for local development (Work Permit Management, Dev 2).
-//
-// This is scoped to the Work Permit feature specifically — it is not the
-// team's shared database connection. See config/db.js for that placeholder.
+// The one shared SQLite connection for local development, used by every
+// feature via config/database.js's `dbProvider: 'sqlite'` branch — the same
+// connection Postgres/Neon production traffic goes through via
+// config/postgresDb.js when DB_PROVIDER=postgres. (Previously Work Permits
+// had its own connection here while the shared foundation, Compliance
+// Content, and Reviews each opened a second/third connection to the same
+// file via config/db.js and config/reviewSqliteDb.js — those are gone now
+// that every repository goes through config/database.js.)
 //
 // Creates server/database/hrckmp.db on first run, applies database/schema.sql
 // (idempotent — every statement is CREATE ... IF NOT EXISTS), and seeds a
@@ -50,10 +54,33 @@ const COLUMN_MIGRATIONS = [
     column: 'information_status',
     ddl: "TEXT NOT NULL DEFAULT 'CURRENT' CHECK (information_status IN ('CURRENT','REVIEW_DUE','OUTDATED','INCOMPLETE'))",
   },
+  // Merged in from config/db.js (shared foundation + Dev 1) and
+  // config/reviewSqliteDb.js (Dev 3) when those connections were
+  // consolidated into this one — see the module comment above.
+  { table: 'compliance_records', column: 'previous_status', ddl: "TEXT CHECK (previous_status IN ('DRAFT','PUBLISHED'))" },
+  { table: 'compliance_records', column: 'archived_at', ddl: 'TEXT' },
+  { table: 'audit_logs', column: 'admin_action', ddl: "TEXT CHECK (admin_action IN ('RESTORE_ARCHIVED','PERMANENT_DELETE'))" },
+  { table: 'review_requests', column: 'description', ddl: 'TEXT' },
+  { table: 'review_requests', column: 'submitted_by', ddl: 'TEXT' },
+  { table: 'review_requests', column: 'reviewed_by', ddl: 'TEXT' },
+  { table: 'review_requests', column: 'submitted_at', ddl: 'TEXT' },
+  { table: 'review_requests', column: 'reviewed_at', ddl: 'TEXT' },
+  { table: 'review_requests', column: 'published_at', ddl: 'TEXT' },
+  {
+    table: 'review_requests',
+    column: 'previous_status',
+    ddl: "TEXT CHECK (previous_status IN ('PENDING','IN_REVIEW','APPROVED','CHANGES_REQUESTED','REJECTED'))",
+  },
+  { table: 'review_requests', column: 'archived_at', ddl: 'TEXT' },
 ];
 
 function applyColumnMigrations() {
   COLUMN_MIGRATIONS.forEach(({ table, column, ddl }) => {
+    // schema.sql creates every table (guarded with IF NOT EXISTS), but a
+    // table that a given local database has never touched still won't
+    // exist here if CREATE TABLE itself was somehow skipped — PRAGMA
+    // table_info on a missing table just returns no rows, so this stays
+    // a safe no-op rather than throwing.
     const existing = db.prepare(`PRAGMA table_info(${table})`).all();
     if (existing.some((c) => c.name === column)) return;
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);

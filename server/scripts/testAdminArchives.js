@@ -10,9 +10,13 @@ process.env.ENABLE_DEV_SEED = 'false';
 
 const app = require('../src/app');
 const env = require('../src/config/env');
-const db = require('../src/config/db');
+// Every repository now goes through config/database.js, which (in the
+// sqlite mode this test hardcodes via DB_PROVIDER above) is backed by the
+// one shared config/sqliteDb.js connection — used directly here for fixture
+// setup/assertions, same as before the config/db.js + config/reviewSqliteDb.js
+// consolidation, just from a single connection instead of three.
+const db = require('../src/config/sqliteDb');
 const permitDb = require('../src/config/database');
-const reviewDb = require('../src/config/reviewSqliteDb');
 const recordRepository = require('../src/repositories/recordRepository');
 const permitRepository = require('../src/repositories/permitRepository');
 const reviewRepository = require('../src/repositories/reviewRepository');
@@ -79,11 +83,11 @@ async function request(base, token, pathSuffix = '', options = {}) {
 
 async function main() {
   seed();
-  recordRepository.archive(10,1);
+  await recordRepository.archive(10,1);
   check('normal content archive remembers state', db.prepare('SELECT previous_status,archived_at FROM compliance_records WHERE record_id=10').get().previous_status==='PUBLISHED' && Boolean(db.prepare('SELECT archived_at FROM compliance_records WHERE record_id=10').get().archived_at));
   await permitRepository.archive(10,new Date().toISOString());
   check('normal permit archive remembers state', db.prepare('SELECT previous_status,archived_at FROM work_permits WHERE permit_id=10').get().previous_status==='DRAFT' && Boolean(db.prepare('SELECT archived_at FROM work_permits WHERE permit_id=10').get().archived_at));
-  reviewRepository.transition(10,'ARCHIVED','Test reviewer',new Date().toISOString());
+  await reviewRepository.transition(10,'ARCHIVED','Test reviewer',new Date().toISOString());
   check('normal review archive remembers state', db.prepare('SELECT previous_status,archived_at FROM review_requests WHERE request_id=10').get().previous_status==='PENDING' && Boolean(db.prepare('SELECT archived_at FROM review_requests WHERE request_id=10').get().archived_at));
   db.prepare('DELETE FROM review_requests WHERE request_id=10').run();
   db.prepare('DELETE FROM work_permits WHERE permit_id=10').run();
@@ -134,9 +138,9 @@ async function main() {
     checks.forEach((name) => console.log(`  PASS ${name}`));
   } finally {
     await new Promise((resolve) => server.close(resolve));
+    // db and permitDb are the same underlying connection (config/database.js's
+    // sqlite branch is backed by config/sqliteDb.js) — close it once.
     await permitDb.close();
-    reviewDb.close();
-    db.close();
     for (const file of [recordFixture,permitFixture,databasePath,`${databasePath}-wal`,`${databasePath}-shm`]) {
       try { fs.unlinkSync(file); } catch { /* already removed */ }
     }

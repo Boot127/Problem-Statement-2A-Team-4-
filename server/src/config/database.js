@@ -1,3 +1,9 @@
+// Provider-agnostic query layer used by every repository in the app —
+// SQLite locally (backed by config/sqliteDb.js's connection), Postgres/Neon
+// in production (config/postgresDb.js) — selected by DB_PROVIDER. Repos
+// write Postgres-style SQL ($1, $2, ... placeholders); the SQLite branch
+// below translates those to SQLite's `?` placeholders so the same query
+// text runs unchanged on both providers.
 const env = require('./env');
 
 if (!['sqlite', 'postgres'].includes(env.dbProvider)) {

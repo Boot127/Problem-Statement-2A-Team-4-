@@ -13,8 +13,8 @@ function logout(req, res) {
   res.status(204).end();
 }
 
-function me(req, res) {
-  const user = authService.getById(req.user.id);
+async function me(req, res) {
+  const user = await authService.getById(req.user.id);
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
   }

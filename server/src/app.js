@@ -2,7 +2,11 @@ const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const env = require('./config/env');
-require('./config/db'); // opens the shared SQLite connection and ensures its schema exists
+// No explicit DB-connection require here: every route below pulls in
+// config/database.js transitively (via its controller -> service ->
+// repository chain), which opens the connection and applies the schema as
+// a side effect of being required — same as it always has, just through
+// one provider-agnostic module now instead of a dedicated require here.
 
 const authRoutes = require('./routes/authRoutes');
 const recordRoutes = require('./routes/recordRoutes');

@@ -15,7 +15,7 @@ function parseId(req, res) {
 
 async function list(req, res, next) {
   try {
-    const newsletters = newsletterUpdateService.list(req.query);
+    const newsletters = await newsletterUpdateService.list(req.query);
     res.json(newsletters);
   } catch (error) {
     next(error);
@@ -27,7 +27,7 @@ async function getOne(req, res, next) {
     const id = parseId(req, res);
     if (id === null) return;
 
-    const newsletter = newsletterUpdateService.getById(id);
+    const newsletter = await newsletterUpdateService.getById(id);
     if (!newsletter) {
       return res.status(404).json({ message: 'Newsletter not found.' });
     }
@@ -39,7 +39,7 @@ async function getOne(req, res, next) {
 
 async function create(req, res, next) {
   try {
-    const newsletter = newsletterUpdateService.create(req.body);
+    const newsletter = await newsletterUpdateService.create(req.body);
     res.status(201).json(newsletter);
   } catch (error) {
     if (error.status === 400) {
@@ -54,7 +54,7 @@ async function update(req, res, next) {
     const id = parseId(req, res);
     if (id === null) return;
 
-    const newsletter = newsletterUpdateService.update(id, req.body);
+    const newsletter = await newsletterUpdateService.update(id, req.body);
     if (!newsletter) {
       return res.status(404).json({ message: 'Newsletter not found.' });
     }
@@ -72,7 +72,7 @@ async function remove(req, res, next) {
     const id = parseId(req, res);
     if (id === null) return;
 
-    const deleted = newsletterUpdateService.remove(id);
+    const deleted = await newsletterUpdateService.remove(id);
     if (!deleted) {
       return res.status(404).json({ message: 'Newsletter not found.' });
     }
@@ -91,7 +91,7 @@ async function uploadFile(req, res, next) {
       return res.status(400).json({ message: 'No file was uploaded.' });
     }
 
-    const newsletter = newsletterUpdateService.attachFile(id, req.file);
+    const newsletter = await newsletterUpdateService.attachFile(id, req.file);
     if (!newsletter) {
       return res.status(404).json({ message: 'Newsletter not found.' });
     }
@@ -124,7 +124,7 @@ async function review(req, res, next) {
     const id = parseId(req, res);
     if (id === null) return;
 
-    const result = newsletterUpdateService.review(id, req.body);
+    const result = await newsletterUpdateService.review(id, req.body);
     if (!result) {
       return res.status(404).json({ message: 'Newsletter not found.' });
     }

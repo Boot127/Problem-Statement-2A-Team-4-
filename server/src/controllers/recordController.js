@@ -4,41 +4,41 @@ const path = require('path');
 const fs = require('fs');
 const complianceContentService = require('../services/complianceContentService');
 
-function list(req, res) {
-  const result = complianceContentService.list(req.query, req.user);
+async function list(req, res) {
+  const result = await complianceContentService.list(req.query, req.user);
   res.json(result);
 }
 
-function getById(req, res) {
-  const record = complianceContentService.getById(Number(req.params.id), req.user);
+async function getById(req, res) {
+  const record = await complianceContentService.getById(Number(req.params.id), req.user);
   res.json({ data: record });
 }
 
-function create(req, res) {
-  const record = complianceContentService.create(req.body, req.user);
+async function create(req, res) {
+  const record = await complianceContentService.create(req.body, req.user);
   res.status(201).json({ data: record });
 }
 
-function update(req, res) {
-  const record = complianceContentService.update(Number(req.params.id), req.body, req.user);
+async function update(req, res) {
+  const record = await complianceContentService.update(Number(req.params.id), req.body, req.user);
   res.json({ data: record });
 }
 
-function archive(req, res) {
-  const record = complianceContentService.archive(Number(req.params.id), req.user);
+async function archive(req, res) {
+  const record = await complianceContentService.archive(Number(req.params.id), req.user);
   res.json({ data: record });
 }
 
-function addComponent(req, res) {
-  const component = complianceContentService.addComponent(Number(req.params.id), req.body, req.user);
+async function addComponent(req, res) {
+  const component = await complianceContentService.addComponent(Number(req.params.id), req.body, req.user);
   res.status(201).json({ data: component });
 }
 
-function addAttachment(req, res) {
+async function addAttachment(req, res) {
   if (!req.file) {
     return res.status(400).json({ message: 'No file uploaded' });
   }
-  const attachment = complianceContentService.addAttachment(
+  const attachment = await complianceContentService.addAttachment(
     Number(req.params.id),
     {
       fileName: req.file.originalname,
@@ -55,13 +55,13 @@ async function aiAssist(req, res) {
   res.json({ data: result });
 }
 
-function listVersions(req, res) {
-  const versions = complianceContentService.listVersions(Number(req.params.id), req.user);
+async function listVersions(req, res) {
+  const versions = await complianceContentService.listVersions(Number(req.params.id), req.user);
   res.json({ data: versions });
 }
 
-function updateComponent(req, res) {
-  const component = complianceContentService.updateComponent(
+async function updateComponent(req, res) {
+  const component = await complianceContentService.updateComponent(
     Number(req.params.id),
     Number(req.params.componentId),
     req.body,
@@ -70,13 +70,13 @@ function updateComponent(req, res) {
   res.json({ data: component });
 }
 
-function removeComponent(req, res) {
-  complianceContentService.removeComponent(Number(req.params.id), Number(req.params.componentId), req.user);
+async function removeComponent(req, res) {
+  await complianceContentService.removeComponent(Number(req.params.id), Number(req.params.componentId), req.user);
   res.status(204).end();
 }
 
-function removeAttachment(req, res) {
-  const deleted = complianceContentService.removeAttachment(
+async function removeAttachment(req, res) {
+  const deleted = await complianceContentService.removeAttachment(
     Number(req.params.id),
     Number(req.params.attachmentId),
     req.user

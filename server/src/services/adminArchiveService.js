@@ -30,8 +30,8 @@ function shapeCompliance(row) {
   const protectedHistory=Number(row.review_count||0)+Number(row.version_count||0);
   return { id:row.id,title:row.title,countryCode:row.country_code,countryName:row.country_name,type:row.type,status:row.status,previousStatus:row.previous_status,archivedAt:row.archived_at||row.updated_at,attachmentCount:Number(row.attachment_count),componentCount:Number(row.component_count),deleteBlockedReason:protectedHistory?'Permanent deletion is unavailable while review or publication history references this item.':'' };
 }
-function shapePermit(row) {
-  const history=repository.targetHistory('work_permit',Number(row.id));
+async function shapePermit(row) {
+  const history=await repository.targetHistory('work_permit',Number(row.id));
   return { id:Number(row.id),title:row.title,countryCode:row.country_code,type:row.type,permitHolderName:row.permit_holder_name||'',clientCompanyName:row.client_company_name||'',status:row.status,previousStatus:row.previous_status,archivedAt:row.archived_at||row.updated_at,deleteBlockedReason:history.reviews||history.versions?'Permanent deletion is unavailable while review or publication history references this item.':'' };
 }
 function shapeReview(row) {
@@ -45,13 +45,13 @@ async function list(query = {}) {
   const filters = { search:String(query.search||'').trim(),country:String(query.country||'').trim(),type:String(query.type||'').trim(),...pageInfo };
   let result; let filterOptions;
   if (entityType === 'COMPLIANCE_CONTENT') {
-    result = repository.listCompliance(filters); filterOptions = repository.complianceFilterOptions();
+    result = await repository.listCompliance(filters); filterOptions = await repository.complianceFilterOptions();
     result.rows = result.rows.map(shapeCompliance);
   } else if (entityType === 'WORK_PERMIT') {
     result = await repository.listPermits(filters); filterOptions = await repository.permitFilterOptions();
-    result.rows = result.rows.map(shapePermit);
+    result.rows = await Promise.all(result.rows.map(shapePermit));
   } else {
-    result = repository.listReviews(filters); filterOptions = repository.reviewFilterOptions();
+    result = await repository.listReviews(filters); filterOptions = repository.reviewFilterOptions();
     result.rows = result.rows.map(shapeReview);
   }
   return { entityType,items:result.rows,pagination:{page:pageInfo.page,limit:pageInfo.limit,total:result.total,totalPages:Math.ceil(result.total/pageInfo.limit)},counts:await repository.archivedCounts(),filterOptions };
@@ -61,28 +61,29 @@ function audit(user, action, entityType, id, oldValue, newValue) {
   auditService.log({ userId:user.id,action,entityType:entityType.toLowerCase(),entityId:id,oldValue,newValue });
 }
 function targetTypeFor(entityType) { return entityType === 'COMPLIANCE_CONTENT' ? 'compliance_record' : 'work_permit'; }
-function restoredContentStatus(row, entityType) {
+async function restoredContentStatus(row, entityType) {
   if (['DRAFT','PUBLISHED'].includes(row.previous_status)) return row.previous_status;
-  return repository.targetHistory(targetTypeFor(entityType), entityType === 'COMPLIANCE_CONTENT' ? row.record_id : row.permit_id).versions > 0 ? 'PUBLISHED' : 'DRAFT';
+  const history=await repository.targetHistory(targetTypeFor(entityType), entityType === 'COMPLIANCE_CONTENT' ? row.record_id : row.permit_id);
+  return history.versions > 0 ? 'PUBLISHED' : 'DRAFT';
 }
 
 async function restore(entityTypeValue, idValue, user) {
   const entityType=requireEntityType(entityTypeValue); const id=requireId(idValue); const now=new Date().toISOString();
   if (entityType === 'COMPLIANCE_CONTENT') {
-    const row=repository.findCompliance(id); if(!row)throw httpError(404,'Archived compliance content not found');
-    const status=restoredContentStatus(row,entityType);
-    return repository.sharedTransaction(()=>{const restored=repository.restoreCompliance(id,status,user.id,now);audit(user,'RESTORE_ARCHIVED',entityType,id,{status:'ARCHIVED'},{status});return {id,title:restored.title,status};});
+    const row=await repository.findCompliance(id); if(!row)throw httpError(404,'Archived compliance content not found');
+    const status=await restoredContentStatus(row,entityType);
+    return repository.sharedTransaction(async ()=>{const restored=await repository.restoreCompliance(id,status,user.id,now);audit(user,'RESTORE_ARCHIVED',entityType,id,{status:'ARCHIVED'},{status});return {id,title:restored.title,status};});
   }
   if (entityType === 'WORK_PERMIT') {
     const row=await repository.findPermit(id); if(!row)throw httpError(404,'Archived work permit not found');
-    const status=restoredContentStatus(row,entityType);
+    const status=await restoredContentStatus(row,entityType);
     const restored=await repository.permitTransaction(()=>repository.restorePermit(id,status,now));
     audit(user,'RESTORE_ARCHIVED',entityType,id,{status:'ARCHIVED'},{status});
     return {id,title:restored.title,status};
   }
-  const row=repository.findReview(id); if(!row)throw httpError(404,'Archived review request not found');
+  const row=await repository.findReview(id); if(!row)throw httpError(404,'Archived review request not found');
   const status=REVIEW_RESTORE_STATUSES.includes(row.previous_status)?row.previous_status:'PENDING';
-  return repository.sharedTransaction(()=>{const restored=repository.restoreReview(id,status,now);audit(user,'RESTORE_ARCHIVED',entityType,id,{status:'ARCHIVED'},{status});return {id,title:restored.title,status,usedFallback:!row.previous_status};});
+  return repository.sharedTransaction(async ()=>{const restored=await repository.restoreReview(id,status,now);audit(user,'RESTORE_ARCHIVED',entityType,id,{status:'ARCHIVED'},{status});return {id,title:restored.title,status,usedFallback:!row.previous_status};});
 }
 
 function safeRecordFile(filePath) {
@@ -103,23 +104,23 @@ function stageFiles(paths) {
 }
 function restoreStaged(staged){for(const item of [...staged].reverse()){try{if(fs.existsSync(item.temporary))fs.renameSync(item.temporary,item.original);}catch{}}}
 function finishStaged(staged){for(const item of staged){try{fs.unlinkSync(item.temporary);}catch{}}}
-function assertNoTargetHistory(entityType,id){const history=repository.targetHistory(targetTypeFor(entityType),id);if(history.reviews||history.versions)throw httpError(409,'Permanent deletion is unavailable while review or publication history references this item.');}
+async function assertNoTargetHistory(entityType,id){const history=await repository.targetHistory(targetTypeFor(entityType),id);if(history.reviews||history.versions)throw httpError(409,'Permanent deletion is unavailable while review or publication history references this item.');}
 
 async function permanentlyDelete(entityTypeValue,idValue,user) {
   const entityType=requireEntityType(entityTypeValue); const id=requireId(idValue);
   if(entityType==='COMPLIANCE_CONTENT'){
-    const row=repository.findCompliance(id);if(!row)throw httpError(404,'Archived compliance content not found');assertNoTargetHistory(entityType,id);
-    const staged=stageFiles(repository.complianceAttachments(id).map(item=>safeRecordFile(item.file_path)));
-    try{repository.sharedTransaction(()=>{if(!repository.deleteCompliance(id))throw httpError(409,'Compliance content is no longer archived');audit(user,'PERMANENT_DELETE',entityType,id,{title:row.title,status:'ARCHIVED'},{deleted:true});});finishStaged(staged);return {id,title:row.title,deleted:true};}catch(error){restoreStaged(staged);throw error;}
+    const row=await repository.findCompliance(id);if(!row)throw httpError(404,'Archived compliance content not found');await assertNoTargetHistory(entityType,id);
+    const attachments=await repository.complianceAttachments(id);const staged=stageFiles(attachments.map(item=>safeRecordFile(item.file_path)));
+    try{await repository.sharedTransaction(async()=>{if(!await repository.deleteCompliance(id))throw httpError(409,'Compliance content is no longer archived');audit(user,'PERMANENT_DELETE',entityType,id,{title:row.title,status:'ARCHIVED'},{deleted:true});});finishStaged(staged);return {id,title:row.title,deleted:true};}catch(error){restoreStaged(staged);throw error;}
   }
   if(entityType==='WORK_PERMIT'){
-    const row=await repository.findPermit(id);if(!row)throw httpError(404,'Archived work permit not found');assertNoTargetHistory(entityType,id);
+    const row=await repository.findPermit(id);if(!row)throw httpError(404,'Archived work permit not found');await assertNoTargetHistory(entityType,id);
     const sources=await repository.permitSourceDocuments(id);const staged=stageFiles(sources.map(item=>permitUploads.storedFilePath(item.stored_file_name)));
     try{await repository.permitTransaction(async()=>{if(!await repository.deletePermit(id))throw httpError(409,'Work permit is no longer archived');});audit(user,'PERMANENT_DELETE',entityType,id,{title:row.title,status:'ARCHIVED'},{deleted:true});finishStaged(staged);return {id,title:row.title,deleted:true};}catch(error){restoreStaged(staged);throw error;}
   }
-  const row=repository.findReview(id);if(!row)throw httpError(404,'Archived review request not found');
-  if(repository.reviewVersionCount(id)>0)throw httpError(409,'Permanent deletion is unavailable because this review is part of publication/version history.');
-  return repository.sharedTransaction(()=>{if(!repository.deleteReview(id))throw httpError(409,'Review request is no longer archived');audit(user,'PERMANENT_DELETE',entityType,id,{title:row.title,status:'ARCHIVED'},{deleted:true});return {id,title:row.title,deleted:true};});
+  const row=await repository.findReview(id);if(!row)throw httpError(404,'Archived review request not found');
+  if(await repository.reviewVersionCount(id)>0)throw httpError(409,'Permanent deletion is unavailable because this review is part of publication/version history.');
+  return repository.sharedTransaction(async()=>{if(!await repository.deleteReview(id))throw httpError(409,'Review request is no longer archived');audit(user,'PERMANENT_DELETE',entityType,id,{title:row.title,status:'ARCHIVED'},{deleted:true});return {id,title:row.title,deleted:true};});
 }
 
 module.exports={ENTITY_TYPES,list,restore,permanentlyDelete};

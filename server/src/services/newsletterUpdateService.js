@@ -37,7 +37,7 @@ function validateNewsletter(data) {
   return errors;
 }
 
-function list(query) {
+async function list(query) {
   return newsletterRepository.listNewsletters({
     search: query.search,
     country: query.country,
@@ -45,11 +45,11 @@ function list(query) {
   });
 }
 
-function getById(id) {
+async function getById(id) {
   return newsletterRepository.getNewsletterById(id);
 }
 
-function create(body) {
+async function create(body) {
   const data = normaliseBody(body);
   const errors = validateNewsletter(data);
   if (errors.length > 0) {
@@ -61,8 +61,8 @@ function create(body) {
   return newsletterRepository.createNewsletter(data);
 }
 
-function update(id, body) {
-  const existing = newsletterRepository.getNewsletterById(id);
+async function update(id, body) {
+  const existing = await newsletterRepository.getNewsletterById(id);
   if (!existing) return null;
 
   const incoming = normaliseBody(body);
@@ -86,13 +86,13 @@ function update(id, body) {
   return newsletterRepository.updateNewsletter(id, data);
 }
 
-function remove(id) {
+async function remove(id) {
   return newsletterRepository.softDeleteNewsletter(id);
 }
 
 // --- C1: upload the source document for a newsletter -----------------------
-function attachFile(id, file) {
-  const existing = newsletterRepository.getNewsletterById(id);
+async function attachFile(id, file) {
+  const existing = await newsletterRepository.getNewsletterById(id);
   if (!existing) return null;
 
   return newsletterRepository.attachFile(id, {
@@ -131,7 +131,7 @@ async function extractText(filePath) {
 }
 
 async function summarize(id) {
-  const newsletter = newsletterRepository.getNewsletterById(id);
+  const newsletter = await newsletterRepository.getNewsletterById(id);
   if (!newsletter) return null;
 
   let sourceText = '';
@@ -159,18 +159,18 @@ async function summarize(id) {
   }
 
   const result = await analyseNewsletterText(sourceText);
-  const detectedUpdate = newsletterRepository.upsertAiResult(id, result);
+  const detectedUpdate = await newsletterRepository.upsertAiResult(id, result);
 
   return {
-    newsletter: newsletterRepository.getNewsletterById(id),
+    newsletter: await newsletterRepository.getNewsletterById(id),
     detectedUpdate,
     extractionNote,
   };
 }
 
 // --- Human-in-the-loop confirm/dismiss of an AI-flagged update -------------
-function review(id, body) {
-  const newsletter = newsletterRepository.getNewsletterById(id);
+async function review(id, body) {
+  const newsletter = await newsletterRepository.getNewsletterById(id);
   if (!newsletter) return null;
 
   const decision = String(body?.decision || '').trim();
@@ -188,7 +188,7 @@ function review(id, body) {
     throw err;
   }
 
-  const detectedUpdate = newsletterRepository.setReviewDecision(id, {
+  const detectedUpdate = await newsletterRepository.setReviewDecision(id, {
     decision,
     linkedComplianceArea: linkedComplianceArea || null,
   });
@@ -200,7 +200,7 @@ function review(id, body) {
   }
 
   return {
-    newsletter: newsletterRepository.getNewsletterById(id),
+    newsletter: await newsletterRepository.getNewsletterById(id),
     detectedUpdate,
   };
 }

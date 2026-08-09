@@ -1,8 +1,8 @@
 // Dev 4 — Parameterized SQL data access for newsletters + detected_updates
 // (docs/HIGH_LEVEL_DESIGN.md, "Legal Updates / Newsletter Management").
-// Mirrors the pattern used by recordRepository.js / reviewRepository.js.
+// Provider-agnostic via config/database.js, same as every other repository.
 
-const db = require('../config/db');
+const db = require('../config/database');
 
 // Two tables, LEFT JOINed: a newsletter with no AI run yet still returns a
 // row with null ai_* fields instead of being hidden.
@@ -22,107 +22,86 @@ function normaliseRow(row) {
   };
 }
 
-function listNewsletters({ search = '', country = '', status = '' } = {}) {
-  const conditions = ['n.is_deleted = 0'];
+async function listNewsletters({ search = '', country = '', status = '' } = {}) {
+  const conditions = ['n.is_deleted = FALSE'];
   const params = [];
+  const bind = (value) => {
+    params.push(value);
+    return `$${params.length}`;
+  };
 
   if (search.trim()) {
-    conditions.push('(n.title LIKE ? OR n.source LIKE ? OR n.notes LIKE ?)');
-    const value = `%${search.trim()}%`;
-    params.push(value, value, value);
+    const like = bind(`%${search.trim()}%`);
+    conditions.push(`(n.title LIKE ${like} OR n.source LIKE ${like} OR n.notes LIKE ${like})`);
   }
+  if (country.trim()) conditions.push(`n.country = ${bind(country.trim())}`);
+  if (status.trim()) conditions.push(`n.status = ${bind(status.trim())}`);
 
-  if (country.trim()) {
-    conditions.push('n.country = ?');
-    params.push(country.trim());
-  }
+  const rows = (
+    await db.query(
+      `SELECT ${SELECT_COLUMNS}
+       FROM newsletters n
+       LEFT JOIN detected_updates d ON d.newsletter_id = n.id
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY n.created_at DESC, n.id DESC`,
+      params
+    )
+  ).rows;
 
-  if (status.trim()) {
-    conditions.push('n.status = ?');
-    params.push(status.trim());
-  }
-
-  const statement = db.prepare(`
-    SELECT ${SELECT_COLUMNS}
-    FROM newsletters n
-    LEFT JOIN detected_updates d ON d.newsletter_id = n.id
-    WHERE ${conditions.join(' AND ')}
-    ORDER BY datetime(n.created_at) DESC, n.id DESC
-  `);
-
-  return statement.all(...params).map(normaliseRow);
+  return rows.map(normaliseRow);
 }
 
-function getNewsletterById(id) {
-  const statement = db.prepare(`
-    SELECT ${SELECT_COLUMNS}
-    FROM newsletters n
-    LEFT JOIN detected_updates d ON d.newsletter_id = n.id
-    WHERE n.id = ? AND n.is_deleted = 0
-  `);
+async function getNewsletterById(id) {
+  const row = (
+    await db.query(
+      `SELECT ${SELECT_COLUMNS}
+       FROM newsletters n
+       LEFT JOIN detected_updates d ON d.newsletter_id = n.id
+       WHERE n.id = $1 AND n.is_deleted = FALSE`,
+      [id]
+    )
+  ).rows[0];
 
-  return normaliseRow(statement.get(id));
+  return normaliseRow(row);
 }
 
-function createNewsletter(data) {
-  const statement = db.prepare(`
-    INSERT INTO newsletters (title, country, source, published_date, status, notes)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
-
-  const result = statement.run(
-    data.title,
-    data.country,
-    data.source || null,
-    data.published_date || null,
-    data.status || 'pending',
-    data.notes || null
+async function createNewsletter(data) {
+  const result = await db.query(
+    `INSERT INTO newsletters (title, country, source, published_date, status, notes)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [data.title, data.country, data.source || null, data.published_date || null, data.status || 'pending', data.notes || null]
   );
 
-  return getNewsletterById(Number(result.lastInsertRowid));
+  return getNewsletterById(result.rows[0].id);
 }
 
-function updateNewsletter(id, data) {
-  const statement = db.prepare(`
-    UPDATE newsletters
-    SET title = ?, country = ?, source = ?, published_date = ?,
-        status = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND is_deleted = 0
-  `);
-
-  statement.run(
-    data.title,
-    data.country,
-    data.source || null,
-    data.published_date || null,
-    data.status,
-    data.notes || null,
-    id
+async function updateNewsletter(id, data) {
+  await db.query(
+    `UPDATE newsletters
+     SET title = $1, country = $2, source = $3, published_date = $4,
+         status = $5, notes = $6, updated_at = $7
+     WHERE id = $8 AND is_deleted = FALSE`,
+    [data.title, data.country, data.source || null, data.published_date || null, data.status, data.notes || null, new Date().toISOString(), id]
   );
 
   return getNewsletterById(id);
 }
 
-function softDeleteNewsletter(id) {
-  const statement = db.prepare(`
-    UPDATE newsletters
-    SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND is_deleted = 0
-  `);
-
-  const result = statement.run(id);
-  return Number(result.changes) > 0;
+async function softDeleteNewsletter(id) {
+  const result = await db.query(
+    `UPDATE newsletters SET is_deleted = TRUE, updated_at = $1 WHERE id = $2 AND is_deleted = FALSE`,
+    [new Date().toISOString(), id]
+  );
+  return result.rowCount > 0;
 }
 
-function attachFile(id, { fileName, filePath }) {
-  const statement = db.prepare(`
-    UPDATE newsletters
-    SET file_name = ?, file_path = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND is_deleted = 0
-  `);
-
-  const result = statement.run(fileName, filePath, id);
-  return Number(result.changes) > 0 ? getNewsletterById(id) : null;
+async function attachFile(id, { fileName, filePath }) {
+  const result = await db.query(
+    `UPDATE newsletters SET file_name = $1, file_path = $2, updated_at = $3 WHERE id = $4 AND is_deleted = FALSE`,
+    [fileName, filePath, new Date().toISOString(), id]
+  );
+  return result.rowCount > 0 ? getNewsletterById(id) : null;
 }
 
 // --- detected_updates (1:1 with a newsletter) ------------------------------
@@ -132,52 +111,57 @@ function normaliseUpdateRow(row) {
   return { ...row, ai_flagged: Boolean(row.ai_flagged) };
 }
 
-function getDetectedUpdateByNewsletterId(newsletterId) {
-  const statement = db.prepare(`
-    SELECT id, newsletter_id, ai_summary, ai_flagged, ai_flag_reason,
-           review_decision, linked_compliance_area, reviewed_at,
-           created_at, updated_at
-    FROM detected_updates
-    WHERE newsletter_id = ?
-  `);
+async function getDetectedUpdateByNewsletterId(newsletterId) {
+  const row = (
+    await db.query(
+      `SELECT id, newsletter_id, ai_summary, ai_flagged, ai_flag_reason,
+              review_decision, linked_compliance_area, reviewed_at,
+              created_at, updated_at
+       FROM detected_updates
+       WHERE newsletter_id = $1`,
+      [newsletterId]
+    )
+  ).rows[0];
 
-  return normaliseUpdateRow(statement.get(newsletterId));
+  return normaliseUpdateRow(row);
 }
 
 // Re-running AI summarisation on the same newsletter overwrites the previous
 // summary and resets the review decision back to "pending", since the
 // underlying content may have changed.
-function upsertAiResult(newsletterId, { summary, flagged, reason }) {
-  const existing = getDetectedUpdateByNewsletterId(newsletterId);
+async function upsertAiResult(newsletterId, { summary, flagged, reason }) {
+  const existing = await getDetectedUpdateByNewsletterId(newsletterId);
+  const now = new Date().toISOString();
 
   if (existing) {
-    db.prepare(`
-      UPDATE detected_updates
-      SET ai_summary = ?, ai_flagged = ?, ai_flag_reason = ?,
-          review_decision = 'pending', linked_compliance_area = NULL,
-          reviewed_at = NULL, updated_at = CURRENT_TIMESTAMP
-      WHERE newsletter_id = ?
-    `).run(summary, flagged ? 1 : 0, reason || null, newsletterId);
+    await db.query(
+      `UPDATE detected_updates
+       SET ai_summary = $1, ai_flagged = $2, ai_flag_reason = $3,
+           review_decision = 'pending', linked_compliance_area = NULL,
+           reviewed_at = NULL, updated_at = $4
+       WHERE newsletter_id = $5`,
+      [summary, Boolean(flagged), reason || null, now, newsletterId]
+    );
   } else {
-    db.prepare(`
-      INSERT INTO detected_updates (newsletter_id, ai_summary, ai_flagged, ai_flag_reason)
-      VALUES (?, ?, ?, ?)
-    `).run(newsletterId, summary, flagged ? 1 : 0, reason || null);
+    await db.query(
+      `INSERT INTO detected_updates (newsletter_id, ai_summary, ai_flagged, ai_flag_reason, updated_at)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newsletterId, summary, Boolean(flagged), reason || null, now]
+    );
   }
 
   return getDetectedUpdateByNewsletterId(newsletterId);
 }
 
-function setReviewDecision(newsletterId, { decision, linkedComplianceArea }) {
-  const statement = db.prepare(`
-    UPDATE detected_updates
-    SET review_decision = ?, linked_compliance_area = ?,
-        reviewed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-    WHERE newsletter_id = ?
-  `);
-
-  const result = statement.run(decision, linkedComplianceArea || null, newsletterId);
-  return Number(result.changes) > 0 ? getDetectedUpdateByNewsletterId(newsletterId) : null;
+async function setReviewDecision(newsletterId, { decision, linkedComplianceArea }) {
+  const now = new Date().toISOString();
+  const result = await db.query(
+    `UPDATE detected_updates
+     SET review_decision = $1, linked_compliance_area = $2, reviewed_at = $3, updated_at = $3
+     WHERE newsletter_id = $4`,
+    [decision, linkedComplianceArea || null, now, newsletterId]
+  );
+  return result.rowCount > 0 ? getDetectedUpdateByNewsletterId(newsletterId) : null;
 }
 
 module.exports = {

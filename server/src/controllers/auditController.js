@@ -2,8 +2,8 @@
 
 const auditService = require('../services/auditService');
 
-function list(req, res) {
-  const result = auditService.list({
+async function list(req, res) {
+  const result = await auditService.list({
     role: req.user.role,
     userId: req.user.id,
     page: req.query.page,

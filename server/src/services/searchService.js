@@ -52,7 +52,7 @@ function normalizePermit(permit) {
 
 async function fetchRecords(query, user) {
   // complianceContentService.list() already enforces visibility server-side.
-  const { data } = complianceContentService.list(
+  const { data } = await complianceContentService.list(
     {
       search: query.search,
       country: query.country,
