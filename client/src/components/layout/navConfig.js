@@ -16,5 +16,5 @@ export const NAV_ITEMS = [
   { label: 'Review & Approval', path: '/reviews', icon: FactCheckOutlinedIcon },
   { label: 'Legal Updates', path: '/updates', icon: CampaignOutlinedIcon },
   { label: 'Search', path: '/search', icon: SearchOutlinedIcon },
-  { label: 'Administration', path: '/admin', icon: AdminPanelSettingsOutlinedIcon },
+  { label: 'Administration', path: '/admin', icon: AdminPanelSettingsOutlinedIcon, roles: ['admin'] },
 ];

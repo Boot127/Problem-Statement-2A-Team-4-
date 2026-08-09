@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS work_permits (
   version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
   status VARCHAR(20) NOT NULL DEFAULT 'DRAFT'
     CHECK (status IN ('DRAFT','PUBLISHED','ARCHIVED')),
+  previous_status VARCHAR(20) CHECK (previous_status IN ('DRAFT','PUBLISHED')),
+  archived_at TIMESTAMPTZ,
   last_reviewed_at DATE,
   next_review_at DATE,
   review_notes TEXT,

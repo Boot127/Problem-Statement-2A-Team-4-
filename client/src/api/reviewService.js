@@ -33,7 +33,9 @@ function transition(id, status, actor) { return axiosClient.patch(`/reviews/${id
 function addComment(id, data) { return axiosClient.post(`/reviews/${id}/comments`, data).then((res) => res.data); }
 function publish(id) { return axiosClient.post(`/reviews/${id}/publish`).then((res) => res.data); }
 function targets(type) { return axiosClient.get('/reviews/targets/options', { params: { type } }).then((res) => res.data); }
-function notifications() { return axiosClient.get('/notifications').then((res) => res.data); }
+function notifications() { return axiosClient.get('/reviews/notifications').then((res) => res.data); }
+function markNotificationRead(id) { return axiosClient.patch(`/reviews/notifications/${id}/read`).then((res) => res.data); }
+function markAllNotificationsRead() { return axiosClient.patch('/reviews/notifications/read-all').then((res) => res.data); }
 function archive(id) { return transition(id, 'ARCHIVED'); }
 
-export default { list, getById, create, update, archive, transition, addComment, publish, targets, notifications };
+export default { list, getById, create, update, archive, transition, addComment, publish, targets, notifications, markNotificationRead, markAllNotificationsRead };

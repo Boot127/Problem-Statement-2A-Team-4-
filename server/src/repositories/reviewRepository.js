@@ -34,8 +34,15 @@ function update(id, row) {
   return findById(id);
 }
 function transition(id, status, actor, now) {
-  db.prepare(`UPDATE review_requests SET review_status=?, reviewed_by=?, reviewed_at=?, updated_at=? WHERE request_id=?`)
-    .run(status, actor, ['APPROVED','REJECTED','CHANGES_REQUESTED'].includes(status) ? now : null, now, id);
+  if (status === 'ARCHIVED') {
+    db.prepare(`UPDATE review_requests SET
+      previous_status=CASE WHEN review_status!='ARCHIVED' THEN review_status ELSE previous_status END,
+      review_status='ARCHIVED', archived_at=?, reviewed_by=?, updated_at=?
+      WHERE request_id=?`).run(now, actor, now, id);
+  } else {
+    db.prepare(`UPDATE review_requests SET review_status=?, reviewed_by=?, reviewed_at=?, updated_at=? WHERE request_id=?`)
+      .run(status, actor, ['APPROVED','REJECTED','CHANGES_REQUESTED'].includes(status) ? now : null, now, id);
+  }
   return findById(id);
 }
 function addComment(id, author, comment, now) {
@@ -45,6 +52,15 @@ function addComment(id, author, comment, now) {
 function comments(id) { return db.prepare('SELECT * FROM review_comments WHERE request_id=? ORDER BY created_at ASC').all(id); }
 function notify(id, message, now) { db.prepare('INSERT INTO notifications (request_id,message,created_at) VALUES (?,?,?)').run(id, message, now); }
 function notifications() { return db.prepare('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100').all(); }
+function findNotification(id) { return db.prepare('SELECT * FROM notifications WHERE notification_id=?').get(id) || null; }
+function markNotificationRead(id) {
+  db.prepare('UPDATE notifications SET is_read=1 WHERE notification_id=?').run(id);
+  return findNotification(id);
+}
+function markAllNotificationsRead() {
+  db.prepare('UPDATE notifications SET is_read=1 WHERE is_read=0').run();
+  return notifications();
+}
 function versions(type, id) { return db.prepare('SELECT * FROM record_versions WHERE target_type=? AND target_id=? ORDER BY version DESC').all(type,id); }
 
 function publish(review, now) {
@@ -52,7 +68,7 @@ function publish(review, now) {
     const target = findTarget(review.target_type, review.target_id);
     if (!target) return null;
     const previous = db.prepare('SELECT MAX(version) AS version FROM record_versions WHERE target_type=? AND target_id=?').get(review.target_type, review.target_id);
-    const version = (previous.version || 0) + 1;
+    const version = Math.max(previous.version || 0, Number(target.version) || 0) + 1;
     db.prepare('INSERT INTO record_versions (target_type,target_id,version,snapshot,published_at,review_id) VALUES (?,?,?,?,?,?)')
       .run(review.target_type, review.target_id, version, JSON.stringify(target), now, review.request_id);
     if (review.target_type === 'work_permit') {
@@ -65,4 +81,4 @@ function publish(review, now) {
   })();
 }
 
-module.exports = { findAll, findById, findTarget, listTargets, insert, update, transition, addComment, comments, notify, notifications, versions, publish };
+module.exports = { findAll, findById, findTarget, listTargets, insert, update, transition, addComment, comments, notify, notifications, findNotification, markNotificationRead, markAllNotificationsRead, versions, publish };

@@ -153,7 +153,10 @@ async function update(id, row) {
 
 async function archive(id, updatedAt) {
   return (await db.query(
-    "UPDATE work_permits SET status='ARCHIVED', updated_at=$1 WHERE permit_id=$2 RETURNING *",
+    `UPDATE work_permits SET
+       previous_status=CASE WHEN status!='ARCHIVED' THEN status ELSE previous_status END,
+       status='ARCHIVED', archived_at=$1, updated_at=$1
+     WHERE permit_id=$2 RETURNING *`,
     [updatedAt,id]
   )).rows[0] || null;
 }

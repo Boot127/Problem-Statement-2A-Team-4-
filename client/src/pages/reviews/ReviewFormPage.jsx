@@ -17,13 +17,17 @@ export default function ReviewFormPage() {
 
   useEffect(() => {
     if (!isEdit) return;
-    reviewService.getById(id).then((review) => {
-      if (!review) {
-        setNotFound(true);
-        return;
-      }
-      setInitialValues({ ...emptyReview, ...review });
-    });
+    reviewService.getById(id)
+      .then((review) => {
+        if (!review) {
+          setNotFound(true);
+          return;
+        }
+        setInitialValues({ ...emptyReview, ...review });
+      })
+      .catch((err) => {
+        setSubmitError(err.response?.data?.message || 'Could not load the review request.');
+      });
   }, [id, isEdit]);
 
   const handleSubmit = (values, { setSubmitting }) => {
@@ -44,7 +48,9 @@ export default function ReviewFormPage() {
   }
 
   if (!initialValues) {
-    return <Typography>Loading…</Typography>;
+    return submitError
+      ? <Alert severity="error">{submitError}</Alert>
+      : <Typography>Loading…</Typography>;
   }
 
   return (

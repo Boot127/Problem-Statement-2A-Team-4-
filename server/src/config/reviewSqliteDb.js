@@ -1,14 +1,14 @@
 // SQLite connection for local development (Review & Approval Workflow, Dev 3).
 //
 // This is scoped to the Review Workflow feature specifically — it is not the
-// team's shared database connection. See config/db.js for that placeholder.
+// team's shared database connection. Both use the configured shared SQLite file.
 //
 // Opens the same server/database/hrckmp.db file as config/sqliteDb.js (Dev 2)
 // and (re-)applies the shared database/schema.sql, which is idempotent —
 // every statement is CREATE ... IF NOT EXISTS — so either feature's config
-// module can run it safely regardless of which one starts first. Seeds a
-// handful of sample review requests, targeting the seeded work permits, only
-// when the table is empty.
+// module can run it safely regardless of which one starts first. Review data
+// is never seeded automatically; reviews must be created against
+// a target that actually exists in the active project database.
 
 const path = require('path');
 const fs = require('fs');
@@ -40,62 +40,10 @@ const reviewColumns = db.prepare('PRAGMA table_info(review_requests)').all().map
   ['submitted_at', 'TEXT'],
   ['reviewed_at', 'TEXT'],
   ['published_at', 'TEXT'],
+  ['previous_status', "TEXT CHECK (previous_status IN ('PENDING','IN_REVIEW','APPROVED','CHANGES_REQUESTED','REJECTED'))"],
+  ['archived_at', 'TEXT'],
 ].forEach(([name, type]) => {
   if (!reviewColumns.includes(name)) db.exec(`ALTER TABLE review_requests ADD COLUMN ${name} ${type}`);
 });
-
-const SEED_REVIEWS = [
-  {
-    target_type: 'work_permit',
-    target_id: 1,
-    title: 'Review: Singapore Employment Pass copy',
-    review_status: 'APPROVED',
-  },
-  {
-    target_type: 'work_permit',
-    target_id: 2,
-    title: 'Review: Singapore S Pass eligibility wording',
-    review_status: 'IN_REVIEW',
-  },
-  {
-    target_type: 'work_permit',
-    target_id: 3,
-    title: 'Review: Philippines AEP fee update',
-    review_status: 'PENDING',
-  },
-  {
-    target_type: 'work_permit',
-    target_id: 4,
-    title: 'Review: Malaysia Employment Pass criteria',
-    review_status: 'CHANGES_REQUESTED',
-  },
-  {
-    target_type: 'work_permit',
-    target_id: 5,
-    title: 'Review: Vietnam Work Permit (superseded) retirement',
-    review_status: 'REJECTED',
-  },
-];
-
-function seedIfEmpty() {
-  const { count } = db.prepare('SELECT COUNT(*) AS count FROM review_requests').get();
-  if (count > 0) return;
-
-  const now = new Date().toISOString();
-  const insert = db.prepare(`
-    INSERT INTO review_requests (
-      target_type, target_id, title, review_status, created_at, updated_at
-    ) VALUES (
-      @target_type, @target_id, @title, @review_status, @created_at, @updated_at
-    )
-  `);
-
-  const insertAll = db.transaction((rows) => {
-    rows.forEach((row) => insert.run({ ...row, created_at: now, updated_at: now }));
-  });
-  insertAll(SEED_REVIEWS);
-}
-
-seedIfEmpty();
 
 module.exports = db;
