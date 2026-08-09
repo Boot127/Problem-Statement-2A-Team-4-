@@ -1,33 +1,41 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
-  Toolbar,
-  Typography,
-  IconButton,
+  Avatar,
+  Badge,
+  Box,
+  Container,
+  Divider,
   Drawer,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  Box,
-  Avatar,
-  Badge,
-  Divider,
-  Container,
-  useMediaQuery,
   Menu,
   MenuItem,
+  Stack,
+  Toolbar,
+  Tooltip,
+  Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
+import BusinessCenterOutlinedIcon from '@mui/icons-material/BusinessCenterOutlined';
+import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
-import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
-import { NAV_ITEMS } from './navConfig';
+import reviewService from '../../api/reviewService';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_LABELS } from '../../utils/enums';
+import { NAV_ITEMS } from './navConfig';
 
-const DRAWER_WIDTH = 260;
+const EXPANDED_DRAWER_WIDTH = 264;
+const COLLAPSED_DRAWER_WIDTH = 80;
+const SIDEBAR_STORAGE_KEY = 'hrckmp_sidebar_collapsed';
 
 function initialsFor(fullName) {
   if (!fullName) return '?';
@@ -44,10 +52,43 @@ export default function DashboardLayout({ children }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true',
+  );
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+
+  const visibleNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role)),
+    [user?.role],
+  );
+  const currentPage = visibleNavItems.find((item) => isPathActive(item.path, location.pathname));
+
+  useEffect(() => {
+    let active = true;
+    reviewService
+      .notifications()
+      .then((items) => {
+        if (active) setUnreadNotifications(items.filter((item) => !item.isRead).length);
+      })
+      .catch(() => {
+        if (active) setUnreadNotifications(0);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const toggleSidebar = () => {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      return next;
+    });
+  };
 
   const goTo = (path) => {
     navigate(path);
@@ -60,87 +101,202 @@ export default function DashboardLayout({ children }) {
     navigate('/login', { replace: true });
   };
 
-  const sidebar = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Toolbar sx={{ px: 3 }}>
-        <Typography variant="subtitle1" fontWeight={700} color="primary.main" noWrap>
-          HRCKMP
-        </Typography>
-      </Toolbar>
+  const renderSidebar = (collapsed) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflowX: 'hidden' }}>
+      <Toolbar />
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent={collapsed ? 'center' : 'space-between'}
+        sx={{ minHeight: 72, px: collapsed ? 1.5 : 2.25 }}
+      >
+        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
+          <Avatar variant="rounded" sx={{ width: 38, height: 38, bgcolor: 'primary.main' }}>
+            <BusinessCenterOutlinedIcon fontSize="small" />
+          </Avatar>
+          {!collapsed && (
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="subtitle1" fontWeight={800} color="primary.main" noWrap>
+                HRCKMP
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                Compliance workspace
+              </Typography>
+            </Box>
+          )}
+        </Stack>
+      </Stack>
       <Divider />
-      <List sx={{ flexGrow: 1, py: 1, px: 1 }}>
-        {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role)).map(({ label, path, icon: Icon }) => {
+      <List component="nav" aria-label="Primary navigation" sx={{ flexGrow: 1, py: 1.5, px: 1 }}>
+        {visibleNavItems.map(({ label, path, icon: Icon }) => {
           const active = isPathActive(path, location.pathname);
-          return (
+          const button = (
             <ListItemButton
               key={path}
               selected={active}
               onClick={() => goTo(path)}
+              aria-label={collapsed ? label : undefined}
               sx={{
-                borderRadius: 1.5,
+                minHeight: 46,
+                justifyContent: collapsed ? 'center' : 'initial',
+                borderRadius: 2,
                 mb: 0.5,
+                px: collapsed ? 1.25 : 1.5,
+                color: active ? 'primary.main' : 'text.secondary',
                 '&.Mui-selected': {
-                  bgcolor: 'primary.main',
-                  color: 'primary.contrastText',
-                  '&:hover': { bgcolor: 'primary.dark' },
-                  '& .MuiListItemIcon-root': { color: 'inherit' },
+                  bgcolor: 'rgba(30,58,138,0.10)',
+                  color: 'primary.main',
+                  boxShadow: 'inset 3px 0 0 #1e3a8a',
+                  '&:hover': { bgcolor: 'rgba(30,58,138,0.14)' },
+                  '& .MuiListItemIcon-root': { color: 'primary.main' },
                 },
+                '&:focus-visible': { outline: '3px solid rgba(59,91,219,0.35)', outlineOffset: 1 },
               }}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}>
+              <ListItemIcon
+                sx={{
+                  minWidth: 0,
+                  mr: collapsed ? 0 : 1.5,
+                  justifyContent: 'center',
+                  color: 'inherit',
+                }}
+              >
                 <Icon fontSize="small" />
               </ListItemIcon>
-              <ListItemText
-                primary={label}
-                slotProps={{ primary: { fontSize: 14, fontWeight: active ? 600 : 500 } }}
-              />
+              {!collapsed && (
+                <ListItemText
+                  primary={label}
+                  slotProps={{ primary: { fontSize: 14, fontWeight: active ? 700 : 550, noWrap: true } }}
+                />
+              )}
             </ListItemButton>
           );
+          return collapsed ? (
+            <Tooltip key={path} title={label} placement="right" arrow>
+              {button}
+            </Tooltip>
+          ) : button;
         })}
       </List>
+      {isDesktop && (
+        <Box sx={{ p: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+          <Tooltip title={collapsed ? 'Expand navigation' : 'Collapse navigation'} placement="right" arrow>
+            <ListItemButton
+              onClick={toggleSidebar}
+              aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+              sx={{ minHeight: 44, justifyContent: collapsed ? 'center' : 'initial', borderRadius: 2, px: collapsed ? 1.25 : 1.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 0, mr: collapsed ? 0 : 1.5, justifyContent: 'center' }}>
+                {collapsed ? <ChevronRightRoundedIcon /> : <ChevronLeftRoundedIcon />}
+              </ListItemIcon>
+              {!collapsed && <ListItemText primary="Collapse" slotProps={{ primary: { fontSize: 14, fontWeight: 600 } }} />}
+            </ListItemButton>
+          </Tooltip>
+        </Box>
+      )}
     </Box>
   );
 
+  const drawerWidth = sidebarCollapsed ? COLLAPSED_DRAWER_WIDTH : EXPANDED_DRAWER_WIDTH;
+
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default', overflowX: 'hidden' }}>
       <AppBar
         position="fixed"
         color="primary"
         elevation={0}
-        sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}
+        sx={{ zIndex: (value) => value.zIndex.drawer + 1, borderBottom: '1px solid rgba(255,255,255,0.12)' }}
       >
-        <Toolbar>
+        <Toolbar sx={{ gap: 1 }}>
           {!isDesktop && (
             <IconButton
               color="inherit"
               edge="start"
               aria-label="Open navigation menu"
               onClick={() => setMobileOpen(true)}
-              sx={{ mr: 1 }}
+              sx={{ mr: 0.5 }}
             >
               <MenuIcon />
             </IconButton>
           )}
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            HR Compliance Knowledge Management Platform
-          </Typography>
-          <IconButton color="inherit" aria-label="Notifications" sx={{ mr: 1.5 }}>
-            <Badge color="error" variant="dot">
-              <NotificationsNoneOutlinedIcon />
-            </Badge>
-          </IconButton>
-          <IconButton
-            onClick={(e) => setUserMenuAnchor(e.currentTarget)}
-            aria-label="Account menu"
-            sx={{ p: 0 }}
+          {isDesktop && (
+            <Tooltip title={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}>
+              <IconButton
+                color="inherit"
+                edge="start"
+                aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+                onClick={toggleSidebar}
+                sx={{ mr: 0.5 }}
+              >
+                {sidebarCollapsed ? <ChevronRightRoundedIcon /> : <ChevronLeftRoundedIcon />}
+              </IconButton>
+            </Tooltip>
+          )}
+          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+            <Typography variant="subtitle1" fontWeight={700} noWrap>
+              {currentPage?.label || 'HR Compliance'}
+            </Typography>
+            <Typography
+              variant="caption"
+              noWrap
+              sx={{ display: { xs: 'none', sm: 'block' }, color: 'rgba(255,255,255,0.72)', lineHeight: 1.1 }}
+            >
+              HR Compliance Knowledge Management Platform
+            </Typography>
+          </Box>
+          <Tooltip title={unreadNotifications ? `${unreadNotifications} unread notifications` : 'Notifications'}>
+            <IconButton
+              color="inherit"
+              aria-label={unreadNotifications ? `Notifications, ${unreadNotifications} unread` : 'Notifications'}
+              onClick={() => navigate('/reviews')}
+            >
+              <Badge color="error" badgeContent={unreadNotifications} max={99} invisible={!unreadNotifications}>
+                <NotificationsNoneOutlinedIcon />
+              </Badge>
+            </IconButton>
+          </Tooltip>
+          <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.22)', my: 1.25 }} />
+          <Stack
+            component="button"
+            type="button"
+            direction="row"
+            alignItems="center"
+            spacing={1.25}
+            onClick={(event) => setUserMenuAnchor(event.currentTarget)}
+            aria-label="Open account menu"
+            aria-haspopup="menu"
+            sx={{
+              border: 0,
+              bgcolor: 'transparent',
+              color: 'inherit',
+              borderRadius: 2,
+              p: 0.5,
+              cursor: 'pointer',
+              font: 'inherit',
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.10)' },
+              '&:focus-visible': { outline: '2px solid white', outlineOffset: 2 },
+            }}
           >
-            <Avatar sx={{ width: 34, height: 34, bgcolor: 'secondary.main', fontSize: 14 }}>
+            <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'right', maxWidth: 180 }}>
+              <Typography variant="body2" fontWeight={700} noWrap>
+                {user?.fullName}
+              </Typography>
+              <Typography variant="caption" noWrap sx={{ display: 'block', color: 'rgba(255,255,255,0.72)' }}>
+                {ROLE_LABELS[user?.role] || user?.role}
+              </Typography>
+            </Box>
+            <Avatar sx={{ width: 36, height: 36, bgcolor: 'secondary.main', fontSize: 14 }}>
               {initialsFor(user?.fullName)}
             </Avatar>
-          </IconButton>
-          <Menu anchorEl={userMenuAnchor} open={Boolean(userMenuAnchor)} onClose={() => setUserMenuAnchor(null)}>
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="body2" fontWeight={600}>
+          </Stack>
+          <Menu
+            anchorEl={userMenuAnchor}
+            open={Boolean(userMenuAnchor)}
+            onClose={() => setUserMenuAnchor(null)}
+            slotProps={{ paper: { sx: { mt: 1, minWidth: 220 } } }}
+          >
+            <Box sx={{ px: 2, py: 1.25 }}>
+              <Typography variant="body2" fontWeight={700}>
                 {user?.fullName}
               </Typography>
               <Typography variant="caption" color="text.secondary">
@@ -149,10 +305,10 @@ export default function DashboardLayout({ children }) {
             </Box>
             <Divider />
             <MenuItem onClick={handleLogout}>
-              <ListItemIcon sx={{ minWidth: 32 }}>
+              <ListItemIcon sx={{ minWidth: 34 }}>
                 <LogoutOutlinedIcon fontSize="small" />
               </ListItemIcon>
-              Logout
+              Sign out
             </MenuItem>
           </Menu>
         </Toolbar>
@@ -162,18 +318,20 @@ export default function DashboardLayout({ children }) {
         <Drawer
           variant="permanent"
           sx={{
-            width: DRAWER_WIDTH,
+            width: drawerWidth,
             flexShrink: 0,
+            transition: theme.transitions.create('width', { duration: theme.transitions.duration.shorter }),
             '& .MuiDrawer-paper': {
-              width: DRAWER_WIDTH,
+              width: drawerWidth,
               boxSizing: 'border-box',
               borderRight: '1px solid',
               borderColor: 'divider',
+              overflowX: 'hidden',
+              transition: theme.transitions.create('width', { duration: theme.transitions.duration.shorter }),
             },
           }}
         >
-          <Toolbar />
-          {sidebar}
+          {renderSidebar(sidebarCollapsed)}
         </Drawer>
       ) : (
         <Drawer
@@ -181,15 +339,15 @@ export default function DashboardLayout({ children }) {
           open={mobileOpen}
           onClose={() => setMobileOpen(false)}
           ModalProps={{ keepMounted: true }}
-          sx={{ '& .MuiDrawer-paper': { width: DRAWER_WIDTH, boxSizing: 'border-box' } }}
+          sx={{ '& .MuiDrawer-paper': { width: EXPANDED_DRAWER_WIDTH, boxSizing: 'border-box' } }}
         >
-          {sidebar}
+          {renderSidebar(false)}
         </Drawer>
       )}
 
-      <Box component="main" sx={{ flexGrow: 1, minWidth: 0 }}>
+      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, width: { xs: '100%', md: `calc(100% - ${drawerWidth}px)` } }}>
         <Toolbar />
-        <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, lg: 4 }, py: { xs: 2.5, sm: 3.5, lg: 4 } }}>
           {children}
         </Container>
       </Box>
