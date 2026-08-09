@@ -11,21 +11,88 @@ function parseId(req, res) {
   return id;
 }
 
-function list(req, res, next) {
+async function list(req, res, next) {
   try {
-    const { search, country, status } = req.query;
-    const permits = workPermitService.listPermits({ search, country, status });
-    res.json(permits);
+    const {
+      search,
+      country,
+      status,
+      reviewState,
+      workerType,
+      visibility,
+      hasSource,
+      hasRenewal,
+      hasCancellation,
+      processCompleteness,
+      minFee,
+      maxFee,
+      minProcessingDays,
+      maxProcessingDays,
+      nextReviewFrom,
+      nextReviewTo,
+      page,
+      limit,
+    } = req.query;
+    res.json(
+      await workPermitService.listPermits({
+        search,
+        country,
+        status,
+        reviewState,
+        workerType,
+        visibility,
+        hasSource,
+        hasRenewal,
+        hasCancellation,
+        processCompleteness,
+        minFee,
+        maxFee,
+        minProcessingDays,
+        maxProcessingDays,
+        nextReviewFrom,
+        nextReviewTo,
+        page,
+        limit,
+      })
+    );
   } catch (err) {
     next(err);
   }
 }
 
-function getById(req, res, next) {
+// Aggregate information-health figures for the dashboard warnings.
+async function healthSummary(req, res, next) {
+  try {
+    res.json(await workPermitService.getHealthSummary());
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function reminders(req, res, next) {
+  try {
+    res.json(await workPermitService.getReminders({ type: req.query.type }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+// Advisory duplicate check used by the create/edit form before saving.
+// Always 200 — an empty array simply means no collision.
+async function duplicates(req, res, next) {
+  try {
+    const { countryCode, permitType, excludeId } = req.query;
+    res.json(await workPermitService.findDuplicates({ countryCode, permitType, excludeId }));
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function recordReview(req, res, next) {
   try {
     const id = parseId(req, res);
     if (id === null) return;
-    const permit = workPermitService.getPermitById(id);
+    const permit = await workPermitService.recordReview(id, req.body || {});
     if (!permit) {
       res.status(404).json({ message: 'Work permit not found' });
       return;
@@ -36,20 +103,35 @@ function getById(req, res, next) {
   }
 }
 
-function create(req, res, next) {
+async function getById(req, res, next) {
   try {
-    const permit = workPermitService.createPermit(req.body || {});
+    const id = parseId(req, res);
+    if (id === null) return;
+    const permit = await workPermitService.getPermitById(id);
+    if (!permit) {
+      res.status(404).json({ message: 'Work permit not found' });
+      return;
+    }
+    res.json(permit);
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function create(req, res, next) {
+  try {
+    const permit = await workPermitService.createPermit(req.body || {});
     res.status(201).json(permit);
   } catch (err) {
     next(err);
   }
 }
 
-function update(req, res, next) {
+async function update(req, res, next) {
   try {
     const id = parseId(req, res);
     if (id === null) return;
-    const permit = workPermitService.updatePermit(id, req.body || {});
+    const permit = await workPermitService.updatePermit(id, req.body || {});
     if (!permit) {
       res.status(404).json({ message: 'Work permit not found' });
       return;
@@ -60,11 +142,11 @@ function update(req, res, next) {
   }
 }
 
-function archive(req, res, next) {
+async function archive(req, res, next) {
   try {
     const id = parseId(req, res);
     if (id === null) return;
-    const permit = workPermitService.archivePermit(id);
+    const permit = await workPermitService.archivePermit(id);
     if (!permit) {
       res.status(404).json({ message: 'Work permit not found' });
       return;
@@ -75,4 +157,14 @@ function archive(req, res, next) {
   }
 }
 
-module.exports = { list, getById, create, update, archive };
+module.exports = {
+  list,
+  getById,
+  healthSummary,
+  reminders,
+  duplicates,
+  recordReview,
+  create,
+  update,
+  archive,
+};

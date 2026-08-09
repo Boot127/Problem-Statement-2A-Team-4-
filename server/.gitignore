@@ -9,4 +9,7 @@ database/*.db-journal
 database/*.db
 database/*.db-shm
 database/*.db-wal
+
+# Uploaded source documents (Dev 1 / Dev 2). User content, not source code —
+# the directory is recreated on server start.
 uploads/
