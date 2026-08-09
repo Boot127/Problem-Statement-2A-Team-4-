@@ -26,6 +26,40 @@ db.pragma('foreign_keys = ON');
 
 db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
 
+// ---------------------------------------------------------------------------
+// Additive migrations
+// ---------------------------------------------------------------------------
+// schema.sql is guarded with CREATE TABLE IF NOT EXISTS, which means a column
+// added to an existing CREATE TABLE is silently skipped on databases that were
+// created earlier. Anything that has to reach an existing developer's database
+// therefore needs an explicit ALTER TABLE here.
+//
+// Every entry is checked against PRAGMA table_info first, so this is idempotent
+// and never rewrites or drops data. SQLite backfills the DEFAULT into existing
+// rows automatically.
+const COLUMN_MIGRATIONS = [
+  { table: 'work_permits', column: 'permit_holder_name', ddl: 'TEXT' },
+  { table: 'work_permits', column: 'client_company_name', ddl: 'TEXT' },
+  { table: 'work_permits', column: 'last_reviewed_at', ddl: 'TEXT' },
+  { table: 'work_permits', column: 'next_review_at', ddl: 'TEXT' },
+  { table: 'work_permits', column: 'review_notes', ddl: 'TEXT' },
+  {
+    table: 'work_permits',
+    column: 'information_status',
+    ddl: "TEXT NOT NULL DEFAULT 'CURRENT' CHECK (information_status IN ('CURRENT','REVIEW_DUE','OUTDATED','INCOMPLETE'))",
+  },
+];
+
+function applyColumnMigrations() {
+  COLUMN_MIGRATIONS.forEach(({ table, column, ddl }) => {
+    const existing = db.prepare(`PRAGMA table_info(${table})`).all();
+    if (existing.some((c) => c.name === column)) return;
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  });
+}
+
+applyColumnMigrations();
+
 const SEED_PERMITS = [
   {
     country_code: 'SG',
@@ -119,6 +153,9 @@ const SEED_PERMITS = [
 ];
 
 function seedIfEmpty() {
+  // Seeding is opt-in so a newly configured production-like database is never
+  // populated with sample permits by merely starting the application.
+  if (!env.enableDevSeed) return;
   const { count } = db.prepare('SELECT COUNT(*) AS count FROM work_permits').get();
   if (count > 0) return;
 
