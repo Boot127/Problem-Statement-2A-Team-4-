@@ -12,6 +12,7 @@ const permitRoutes = require('./routes/permitRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const reviewController = require('./controllers/reviewController');
+const newsletterRoutes = require('./routes/newsletterRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
@@ -33,7 +34,12 @@ app.use('/api/v1/audit-logs', auditRoutes);
 app.use('/api/v1/permits', permitRoutes);
 app.use('/api/v1/reviews', reviewRoutes);
 app.get('/api/v1/notifications', reviewController.notifications);
+ feature/newsletter-crud
+app.use('/api/v1/newsletters', newsletterRoutes);
+app.use('/uploads/newsletters', express.static(path.join(__dirname, '..', 'uploads', 'newsletters')));
+
 app.use('/api/v1/admin', adminRoutes);
+ main
 
 // Add new feature route mounts ABOVE this line. errorHandler
 // must stay the LAST app.use() call — Express only routes errors to
