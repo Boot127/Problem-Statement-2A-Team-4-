@@ -1,6 +1,8 @@
 import { Routes, Route } from 'react-router-dom';
 import DashboardPage from '../pages/DashboardPage';
 import ContentPage from '../pages/content/ContentPage';
+import RecordFormPage from '../pages/content/RecordFormPage';
+import RecordDetailPage from '../pages/content/RecordDetailPage';
 import PermitListPage from '../pages/permits/PermitListPage';
 import PermitFormPage from '../pages/permits/PermitFormPage';
 import PermitDetailPage from '../pages/permits/PermitDetailPage';
@@ -17,6 +19,9 @@ export default function AppRoutes() {
     <Routes>
       <Route path="/" element={<DashboardPage />} />
       <Route path="/content" element={<ContentPage />} />
+      <Route path="/content/new" element={<RecordFormPage />} />
+      <Route path="/content/:id" element={<RecordDetailPage />} />
+      <Route path="/content/:id/edit" element={<RecordFormPage />} />
       <Route path="/permits" element={<PermitListPage />} />
       <Route path="/permits/new" element={<PermitFormPage />} />
       <Route path="/permits/:id" element={<PermitDetailPage />} />

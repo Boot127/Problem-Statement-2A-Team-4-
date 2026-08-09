@@ -1,3 +1,15 @@
-// TODO: shared — audit trail request handler
+// Shared — audit trail request handler (Section 14.6 / Section 4.5).
 
-module.exports = {};
+const auditService = require('../services/auditService');
+
+function list(req, res) {
+  const result = auditService.list({
+    role: req.user.role,
+    userId: req.user.id,
+    page: req.query.page,
+    limit: req.query.limit,
+  });
+  res.json(result);
+}
+
+module.exports = { list };
