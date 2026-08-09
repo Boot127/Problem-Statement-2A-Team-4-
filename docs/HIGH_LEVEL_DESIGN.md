@@ -949,7 +949,8 @@ hr-compliance-platform/
 ├── server/                              # Express backend (REST API)
 │   ├── src/
 │   │   ├── index.js  app.js
-│   │   ├── config/ (db.js, env.js)
+│   │   ├── config/ (database.js — provider-agnostic query layer, sqliteDb.js,
+│   │   │            postgresDb.js, env.js)
 │   │   ├── middleware/ (auth, rbac, visibility, validate, errorHandler)
 │   │   ├── routes/
 │   │   │   ├── authRoutes.js
@@ -974,6 +975,7 @@ hr-compliance-platform/
 └── docs/
     ├── HIGH_LEVEL_DESIGN.md
     ├── PROJECT_IMPLEMENTATION_PHASE.md
+    ├── USE_CASES.md
     └── database/schema.sql
 ```
 
