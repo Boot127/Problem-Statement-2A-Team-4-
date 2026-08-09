@@ -1,78 +1,39 @@
-// Dev 2 — work_permits data access.
-// Backed by localStorage for now; the async function shapes match what a real
-// Axios-based service (see recordService.js) would expose, so swapping in a
-// live API later only touches this file.
+// Dev 2 — work_permits API calls.
+// Talks to the Express/SQLite backend (see server/src/routes/permitRoutes.js).
+// The function shapes (list/getById/create/update/archive, all Promise-based,
+// getById resolving to null on not-found) are unchanged from the previous
+// localStorage-backed version, so the permit pages needed no changes.
 
-import { getAllPermits, savePermits } from '../utils/workPermitStorage';
-
-const SIMULATED_DELAY_MS = 150;
-
-function delay(value) {
-  return new Promise((resolve) => setTimeout(() => resolve(value), SIMULATED_DELAY_MS));
-}
+import axiosClient from './axiosClient';
 
 function list({ search = '', country = '', status = '' } = {}) {
-  let permits = getAllPermits();
-
-  if (country) {
-    permits = permits.filter((p) => p.countryCode === country);
-  }
-  if (status) {
-    permits = permits.filter((p) => p.status === status);
-  }
-  if (search.trim()) {
-    const q = search.trim().toLowerCase();
-    permits = permits.filter(
-      (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.permitType.toLowerCase().includes(q)
-    );
-  }
-
-  const sorted = [...permits].sort((a, b) => a.title.localeCompare(b.title));
-  return delay(sorted);
+  const params = {};
+  if (search) params.search = search;
+  if (country) params.country = country;
+  if (status) params.status = status;
+  return axiosClient.get('/permits', { params }).then((res) => res.data);
 }
 
 function getById(id) {
-  const permit = getAllPermits().find((p) => p.id === id) || null;
-  return delay(permit);
+  return axiosClient
+    .get(`/permits/${id}`)
+    .then((res) => res.data)
+    .catch((err) => {
+      if (err.response?.status === 404) return null;
+      throw err;
+    });
 }
 
 function create(data) {
-  const permits = getAllPermits();
-  const now = new Date().toISOString();
-  const permit = {
-    status: 'DRAFT',
-    version: 1,
-    ...data,
-    id: `permit-${Date.now()}-${Math.round(Math.random() * 1000)}`,
-    createdAt: now,
-    updatedAt: now,
-  };
-  permits.push(permit);
-  savePermits(permits);
-  return delay(permit);
+  return axiosClient.post('/permits', data).then((res) => res.data);
 }
 
 function update(id, data) {
-  const permits = getAllPermits();
-  const index = permits.findIndex((p) => p.id === id);
-  if (index === -1) {
-    return Promise.reject(new Error('Work permit not found'));
-  }
-  const updated = {
-    ...permits[index],
-    ...data,
-    id,
-    updatedAt: new Date().toISOString(),
-  };
-  permits[index] = updated;
-  savePermits(permits);
-  return delay(updated);
+  return axiosClient.put(`/permits/${id}`, data).then((res) => res.data);
 }
 
 function archive(id) {
-  return update(id, { status: 'ARCHIVED' });
+  return axiosClient.patch(`/permits/${id}/archive`).then((res) => res.data);
 }
 
 export default { list, getById, create, update, archive };

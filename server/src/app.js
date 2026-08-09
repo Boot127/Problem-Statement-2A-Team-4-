@@ -1,17 +1,19 @@
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-require('./config/db'); // opens the SQLite connection and ensures the schema exists
+const env = require('./config/env');
+require('./config/db'); // opens the shared SQLite connection and ensures its schema exists
 
 const authRoutes = require('./routes/authRoutes');
 const recordRoutes = require('./routes/recordRoutes');
 const searchRoutes = require('./routes/searchRoutes');
 const auditRoutes = require('./routes/auditRoutes');
+const permitRoutes = require('./routes/permitRoutes');
 const errorHandler = require('./middleware/errorHandler');
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: env.clientOrigin }));
 app.use(express.json());
 
 // Serves uploaded source-document attachments (FR-1.5). Static files only —
@@ -25,10 +27,14 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/records', recordRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/audit-logs', auditRoutes);
+app.use('/api/v1/permits', permitRoutes);
 
-// permitRoutes / reviewRoutes / newsletterRoutes belong to Developers 2-4
-// and are intentionally not mounted yet — their route files remain the
-// original TODO stubs.
+// reviewRoutes / newsletterRoutes belong to Developers 3-4 and are
+// intentionally not mounted yet — their route files remain the original
+// TODO stubs. Add new feature route mounts ABOVE this line. errorHandler
+// must stay the LAST app.use() call — Express only routes errors to
+// handlers registered after the route that threw, so anything mounted below
+// it will not have its errors caught.
 
 app.use((req, res) => res.status(404).json({ message: 'Not found' }));
 app.use(errorHandler);
