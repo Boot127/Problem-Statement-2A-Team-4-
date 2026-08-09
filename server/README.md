@@ -90,9 +90,21 @@ location, so there's exactly one database file, not two.
    Suggestion panel visibly labels which one happened ("AI Suggestion
    (live)" vs "Offline Suggestion (not real AI)"), so a misconfigured key
    doesn't quietly masquerade as a working one.
-7. **Search only covers `compliance_records`.** FR-0.7 is cross-entity, but
-   `work_permits` isn't wired into it yet — see `src/services/searchService.js`
-   for the extension point.
+7. **Search covers `compliance_records` and `work_permits`, not reviews or
+   newsletters.** FR-0.7 is cross-entity; Search is now an explicit Dev 1
+   responsibility (HLD Section 5) rather than an unclaimed shared-foundation
+   item. `searchService.js` calls into `complianceContentService` and
+   `workPermitService` rather than duplicating their filtering SQL.
+   Reviews/newsletters aren't included — they're workflow objects without
+   their own `visibility_level`, not browsable content — but adding them
+   later is just another fetch+normalize branch.
+   **Note:** `permitRoutes.js` has no `auth`/`authorize` middleware, so
+   `/permits` itself returns everything regardless of caller. Search applies
+   the shared visibility rule to permits itself (post-query, in
+   `searchService.js`) rather than relying on an enforcement that doesn't
+   exist yet on that route — verified: a `sales` search never surfaces a
+   `COMPLIANCE_ONLY` permit or record, even though `GET /permits` directly
+   would.
 
 ## Setup
 

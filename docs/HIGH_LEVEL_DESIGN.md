@@ -130,7 +130,7 @@ The assignment requires every student to develop **at least one feature with bas
 
 | Developer | Main Feature | Core Entity | CRUD | Enhanced Capabilities |
 |-----------|--------------|-------------|------|-----------------------|
-| **Developer 1** | Compliance Content Management | `compliance_records` (labour laws + statutory benefits, incl. WICA, social insurance, termination, leave) | Create, view, update, archive records | Local/foreign/expat classification · structured benefit components (rates & caps) · AI grammar & professional rewriting · source-document attachments |
+| **Developer 1** | Compliance Content Management + Search | `compliance_records` (labour laws + statutory benefits, incl. WICA, social insurance, termination, leave) | Create, view, update, archive records | Local/foreign/expat classification · structured benefit components (rates & caps) · AI grammar & professional rewriting · source-document attachments · **cross-entity keyword search (Section 14.6)**, owned by Dev 1 since no other developer had claimed it and the `/search` endpoint was already built against `compliance_records` — extended to also cover `work_permits`, applying the same visibility rule to both |
 | **Developer 2** | Work Permit Management | `work_permits` | Create, view, update, archive permit types | Ordered step-by-step process flow · required-document checklist · New / Renewal / Cancellation as child processes of one permit |
 | **Developer 3** | Review & Approval Workflow | `review_requests` (standalone entity that points at any content record) | Create submission, view pending reviews, update review status, archive/reject | Review-status machine (Pending → In Review → Approved, with Changes Requested / Rejected) · publish action (sets content to Published + writes version snapshot) · review comments · notifications |
 | **Developer 4** | Legal Updates / Newsletter Management | `newsletters` + `detected_updates` | Upload/add newsletters, view detected updates, update review status, archive/dismiss | AI summarisation of newsletter items · relevance flagging · link a detected update to an existing compliance record |
@@ -139,7 +139,7 @@ The assignment requires every student to develop **at least one feature with bas
 - **Authentication & session management** (login, JWT, logout).
 - **RBAC** middleware (`authorize(...roles)`) and role model.
 - **Content visibility** enforcement: `worker_type` and `visibility_level` are shared cross-cutting fields applied consistently to all applicable compliance content entities, with query-level enforcement in the shared layer.
-- **Search & filters** across all content entities (country, category, worker type, status).
+- **Search & filters** across all content entities (country, category, worker type, status). Implementation owned by **Developer 1** (see Section 5's table) — the other three developers' repositories/services are called from `searchService.js` rather than duplicated, so each feature's own filtering logic stays in one place.
 - **Audit logging** of every create / update / archive.
 - **Common UI components** (page layout, tables, form controls, status chips, confirm dialogs).
 
