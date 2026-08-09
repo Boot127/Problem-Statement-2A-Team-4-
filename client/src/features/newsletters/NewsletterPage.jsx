@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState
+} from "react";
 import {
   createNewsletter,
   deleteNewsletter,
   getNewsletters,
-  updateNewsletter
+  reviewNewsletter,
+  summarizeNewsletter,
+  updateNewsletter,
+  uploadNewsletterFile
 } from "./newsletterApi.js";
 import "./NewsletterPage.css";
 
@@ -295,43 +303,19 @@ export default function NewsletterPage() {
                   <th>Source</th>
                   <th>Date</th>
                   <th>Status</th>
+                  <th>AI review</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {newsletters.map((newsletter) => (
-                  <tr key={newsletter.id}>
-                    <td>
-                      <strong>{newsletter.title}</strong>
-                      {newsletter.notes && <small>{newsletter.notes}</small>}
-                    </td>
-                    <td>{newsletter.country}</td>
-                    <td>{newsletter.source || "—"}</td>
-                    <td>{newsletter.published_date || "—"}</td>
-                    <td>
-                      <span className={`status status-${newsletter.status}`}>
-                        {newsletter.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="link-button"
-                          onClick={() => startEdit(newsletter)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="link-button danger"
-                          onClick={() => handleDelete(newsletter)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <NewsletterRow
+                    key={newsletter.id}
+                    newsletter={newsletter}
+                    onEdit={() => startEdit(newsletter)}
+                    onDelete={() => handleDelete(newsletter)}
+                    onChanged={loadNewsletters}
+                  />
                 ))}
               </tbody>
             </table>
@@ -342,4 +326,190 @@ export default function NewsletterPage() {
   );
 }
 
+/**
+ * One newsletter row, including the AI workflow controls: attach the
+ * source document, run AI summarisation/flagging on it, then confirm or
+ * dismiss the detected update (confirming links it to a compliance area).
+ */
+function NewsletterRow({ newsletter, onEdit, onDelete, onChanged }) {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [complianceArea, setComplianceArea] = useState(
+    newsletter.linked_compliance_area || ""
+  );
+  const [busy, setBusy] = useState(false);
+  const [rowError, setRowError] = useState("");
+
+  async function handleUpload() {
+    if (!selectedFile) return;
+
+    try {
+      setBusy(true);
+      setRowError("");
+      await uploadNewsletterFile(newsletter.id, selectedFile);
+      setSelectedFile(null);
+      await onChanged();
+    } catch (err) {
+      setRowError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSummarize() {
+    try {
+      setBusy(true);
+      setRowError("");
+      await summarizeNewsletter(newsletter.id);
+      await onChanged();
+    } catch (err) {
+      setRowError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleReview(decision) {
+    if (decision === "confirmed" && !complianceArea.trim()) {
+      setRowError(
+        "Enter the compliance area/record this update relates to before confirming."
+      );
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setRowError("");
+      await reviewNewsletter(newsletter.id, decision, complianceArea.trim());
+      await onChanged();
+    } catch (err) {
+      setRowError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const decision = newsletter.review_decision;
+
+  return (
+    <tr>
+      <td>
+        <strong>{newsletter.title}</strong>
+        {newsletter.notes && <small>{newsletter.notes}</small>}
+      </td>
+      <td>{newsletter.country}</td>
+      <td>{newsletter.source || "—"}</td>
+      <td>{newsletter.published_date || "—"}</td>
+      <td>
+        <span className={`status status-${newsletter.status}`}>
+          {newsletter.status}
+        </span>
+      </td>
+      <td className="ai-cell">
+        {newsletter.file_name ? (
+          <p className="file-name">📎 {newsletter.file_name}</p>
+        ) : (
+          <div className="upload-controls">
+            <input
+              type="file"
+              accept=".pdf,.txt,.docx"
+              aria-label={`Attach source file for ${newsletter.title}`}
+              onChange={(event) =>
+                setSelectedFile(event.target.files?.[0] || null)
+              }
+            />
+            <button
+              type="button"
+              className="secondary-button small"
+              disabled={!selectedFile || busy}
+              onClick={handleUpload}
+            >
+              Attach
+            </button>
+          </div>
+        )}
+
+        {newsletter.ai_summary ? (
+          <div className="ai-summary">
+            <p>{newsletter.ai_summary}</p>
+
+            {newsletter.ai_flagged ? (
+              <span className="flag-badge flagged">
+                ⚠ Possible legal change
+              </span>
+            ) : (
+              <span className="flag-badge">No change detected</span>
+            )}
+
+            {newsletter.ai_flag_reason && (
+              <small>{newsletter.ai_flag_reason}</small>
+            )}
+
+            {newsletter.ai_flagged && decision === "pending" && (
+              <div className="review-controls">
+                <input
+                  type="text"
+                  placeholder="Linked compliance area (e.g. Singapore – Statutory Benefits)"
+                  value={complianceArea}
+                  onChange={(event) => setComplianceArea(event.target.value)}
+                />
+                <div className="review-buttons">
+                  <button
+                    type="button"
+                    className="primary-button small"
+                    disabled={busy}
+                    onClick={() => handleReview("confirmed")}
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-button small"
+                    disabled={busy}
+                    onClick={() => handleReview("dismissed")}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {decision === "confirmed" && (
+              <span className="decision-badge confirmed">
+                ✓ Confirmed — linked to {newsletter.linked_compliance_area}
+              </span>
+            )}
+
+            {decision === "dismissed" && (
+              <span className="decision-badge dismissed">✕ Dismissed</span>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="link-button"
+            disabled={busy}
+            onClick={handleSummarize}
+          >
+            Run AI summary + flag
+          </button>
+        )}
+
+        {rowError && <p className="error-message small">{rowError}</p>}
+      </td>
+      <td>
+        <div className="row-actions">
+          <button type="button" className="link-button" onClick={onEdit}>
+            Edit
+          </button>
+          <button
+            type="button"
+            className="link-button danger"
+            onClick={onDelete}
+          >
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
 }

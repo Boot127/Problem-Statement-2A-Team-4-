@@ -1,52 +1,74 @@
-const API_BASE_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+// Dev 4 — newsletters + detected_updates API calls. Talks to
+// server/src/routes/newsletterRoutes.js via the shared axiosClient (adds
+// the auth Bearer token and redirects to /login on a 401, same as every
+// other feature — see client/src/api/reviewService.js).
 
-async function request(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers
-    },
-    ...options
-  });
+import axiosClient from '../../api/axiosClient';
 
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const details = data?.errors?.join(" ") || data?.message;
-    throw new Error(details || "Request failed.");
-  }
-
-  return data;
+function unwrapError(err) {
+  const data = err?.response?.data;
+  const details = data?.errors?.join(' ') || data?.message;
+  return new Error(details || 'Request failed.');
 }
 
 export function getNewsletters(filters = {}) {
-  const query = new URLSearchParams();
+  const params = {};
+  if (filters.search) params.search = filters.search;
+  if (filters.country) params.country = filters.country;
+  if (filters.status) params.status = filters.status;
 
-  if (filters.search) query.set("search", filters.search);
-  if (filters.country) query.set("country", filters.country);
-  if (filters.status) query.set("status", filters.status);
-
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  return request(`/newsletters${suffix}`);
+  return axiosClient
+    .get('/newsletters', { params })
+    .then((res) => res.data)
+    .catch((err) => { throw unwrapError(err); });
 }
 
 export function createNewsletter(data) {
-  return request("/newsletters", {
-    method: "POST",
-    body: JSON.stringify(data)
-  });
+  return axiosClient
+    .post('/newsletters', data)
+    .then((res) => res.data)
+    .catch((err) => { throw unwrapError(err); });
 }
 
 export function updateNewsletter(id, data) {
-  return request(`/newsletters/${id}`, {
-    method: "PUT",
-    body: JSON.stringify(data)
-  });
+  return axiosClient
+    .put(`/newsletters/${id}`, data)
+    .then((res) => res.data)
+    .catch((err) => { throw unwrapError(err); });
 }
 
 export function deleteNewsletter(id) {
-  return request(`/newsletters/${id}`, {
-    method: "DELETE"
-  });
+  return axiosClient
+    .delete(`/newsletters/${id}`)
+    .then((res) => res.data)
+    .catch((err) => { throw unwrapError(err); });
+}
+
+export function uploadNewsletterFile(id, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return axiosClient
+    .post(`/newsletters/${id}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    .then((res) => res.data)
+    .catch((err) => { throw unwrapError(err); });
+}
+
+export function summarizeNewsletter(id) {
+  return axiosClient
+    .post(`/newsletters/${id}/summarize`)
+    .then((res) => res.data)
+    .catch((err) => { throw unwrapError(err); });
+}
+
+export function reviewNewsletter(id, decision, linkedComplianceArea) {
+  return axiosClient
+    .post(`/newsletters/${id}/review`, {
+      decision,
+      linked_compliance_area: linkedComplianceArea,
+    })
+    .then((res) => res.data)
+    .catch((err) => { throw unwrapError(err); });
 }

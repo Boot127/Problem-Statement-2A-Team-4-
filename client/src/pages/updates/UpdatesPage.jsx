@@ -1,5 +1,5 @@
-import PlaceholderPage from '../PlaceholderPage';
+import NewsletterPage from '../../features/newsletters/NewsletterPage';
 
 export default function UpdatesPage() {
-  return <PlaceholderPage title="Legal Updates Management" />;
+  return <NewsletterPage />;
 }
