@@ -10,6 +10,7 @@ const searchRoutes = require('./routes/searchRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const permitRoutes = require('./routes/permitRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 const reviewController = require('./controllers/reviewController');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -32,6 +33,7 @@ app.use('/api/v1/audit-logs', auditRoutes);
 app.use('/api/v1/permits', permitRoutes);
 app.use('/api/v1/reviews', reviewRoutes);
 app.get('/api/v1/notifications', reviewController.notifications);
+app.use('/api/v1/admin', adminRoutes);
 
 // Add new feature route mounts ABOVE this line. errorHandler
 // must stay the LAST app.use() call — Express only routes errors to

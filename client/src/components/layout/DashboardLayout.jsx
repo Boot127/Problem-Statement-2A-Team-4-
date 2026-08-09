@@ -69,7 +69,7 @@ export default function DashboardLayout({ children }) {
       </Toolbar>
       <Divider />
       <List sx={{ flexGrow: 1, py: 1, px: 1 }}>
-        {NAV_ITEMS.map(({ label, path, icon: Icon }) => {
+        {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role)).map(({ label, path, icon: Icon }) => {
           const active = isPathActive(path, location.pathname);
           return (
             <ListItemButton

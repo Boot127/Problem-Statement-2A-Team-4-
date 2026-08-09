@@ -29,4 +29,26 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 db.exec(fs.readFileSync(SCHEMA_PATH, 'utf8'));
 
+// Additive shared migrations for databases created before Archive Management.
+// Keeping these as nullable columns preserves every existing row and lets
+// normal archive actions remember the exact state an administrator restores.
+const COLUMN_MIGRATIONS = [
+  ['compliance_records', 'previous_status', "TEXT CHECK (previous_status IN ('DRAFT','PUBLISHED'))"],
+  ['compliance_records', 'archived_at', 'TEXT'],
+  ['work_permits', 'previous_status', "TEXT CHECK (previous_status IN ('DRAFT','PUBLISHED'))"],
+  ['work_permits', 'archived_at', 'TEXT'],
+  ['review_requests', 'previous_status', "TEXT CHECK (previous_status IN ('PENDING','IN_REVIEW','APPROVED','CHANGES_REQUESTED','REJECTED'))"],
+  ['review_requests', 'archived_at', 'TEXT'],
+  ['audit_logs', 'admin_action', "TEXT CHECK (admin_action IN ('RESTORE_ARCHIVED','PERMANENT_DELETE'))"],
+];
+
+for (const [table, column, ddl] of COLUMN_MIGRATIONS) {
+  const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
+  if (!exists) continue;
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!columns.some((entry) => entry.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${ddl}`);
+  }
+}
+
 module.exports = db;

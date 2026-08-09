@@ -34,8 +34,15 @@ function update(id, row) {
   return findById(id);
 }
 function transition(id, status, actor, now) {
-  db.prepare(`UPDATE review_requests SET review_status=?, reviewed_by=?, reviewed_at=?, updated_at=? WHERE request_id=?`)
-    .run(status, actor, ['APPROVED','REJECTED','CHANGES_REQUESTED'].includes(status) ? now : null, now, id);
+  if (status === 'ARCHIVED') {
+    db.prepare(`UPDATE review_requests SET
+      previous_status=CASE WHEN review_status!='ARCHIVED' THEN review_status ELSE previous_status END,
+      review_status='ARCHIVED', archived_at=?, reviewed_by=?, updated_at=?
+      WHERE request_id=?`).run(now, actor, now, id);
+  } else {
+    db.prepare(`UPDATE review_requests SET review_status=?, reviewed_by=?, reviewed_at=?, updated_at=? WHERE request_id=?`)
+      .run(status, actor, ['APPROVED','REJECTED','CHANGES_REQUESTED'].includes(status) ? now : null, now, id);
+  }
   return findById(id);
 }
 function addComment(id, author, comment, now) {

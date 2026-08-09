@@ -1,12 +1,17 @@
 const db = require('../config/db');
 
 function insert({ userId, action, entityType, entityId, oldValue, newValue }) {
+  const isAdminArchiveAction = ['RESTORE_ARCHIVED', 'PERMANENT_DELETE'].includes(action);
+  const storedAction = isAdminArchiveAction
+    ? (action === 'RESTORE_ARCHIVED' ? 'update' : 'archive')
+    : action;
   db.prepare(
-    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, old_value, new_value)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO audit_logs (user_id, action, admin_action, entity_type, entity_id, old_value, new_value)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(
     userId ?? null,
-    action,
+    storedAction,
+    isAdminArchiveAction ? action : null,
     entityType,
     entityId ?? null,
     oldValue ? JSON.stringify(oldValue) : null,
@@ -18,7 +23,7 @@ function serialize(row) {
   return {
     id: row.log_id,
     userId: row.user_id,
-    action: row.action,
+    action: row.admin_action || row.action,
     entityType: row.entity_type,
     entityId: row.entity_id,
     oldValue: row.old_value ? JSON.parse(row.old_value) : null,

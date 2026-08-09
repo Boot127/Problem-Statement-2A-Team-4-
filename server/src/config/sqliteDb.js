@@ -43,6 +43,8 @@ const COLUMN_MIGRATIONS = [
   { table: 'work_permits', column: 'last_reviewed_at', ddl: 'TEXT' },
   { table: 'work_permits', column: 'next_review_at', ddl: 'TEXT' },
   { table: 'work_permits', column: 'review_notes', ddl: 'TEXT' },
+  { table: 'work_permits', column: 'previous_status', ddl: "TEXT CHECK (previous_status IN ('DRAFT','PUBLISHED'))" },
+  { table: 'work_permits', column: 'archived_at', ddl: 'TEXT' },
   {
     table: 'work_permits',
     column: 'information_status',

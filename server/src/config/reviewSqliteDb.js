@@ -40,6 +40,8 @@ const reviewColumns = db.prepare('PRAGMA table_info(review_requests)').all().map
   ['submitted_at', 'TEXT'],
   ['reviewed_at', 'TEXT'],
   ['published_at', 'TEXT'],
+  ['previous_status', "TEXT CHECK (previous_status IN ('PENDING','IN_REVIEW','APPROVED','CHANGES_REQUESTED','REJECTED'))"],
+  ['archived_at', 'TEXT'],
 ].forEach(([name, type]) => {
   if (!reviewColumns.includes(name)) db.exec(`ALTER TABLE review_requests ADD COLUMN ${name} ${type}`);
 });

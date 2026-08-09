@@ -176,7 +176,11 @@ function update(id, data, userId) {
 
 function archive(id, userId) {
   db.prepare(
-    "UPDATE compliance_records SET status = 'ARCHIVED', updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE record_id = ?"
+    `UPDATE compliance_records SET
+       previous_status = CASE WHEN status != 'ARCHIVED' THEN status ELSE previous_status END,
+       status = 'ARCHIVED', archived_at = CURRENT_TIMESTAMP,
+       updated_by = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE record_id = ?`
   ).run(userId, id);
   return findById(id);
 }
