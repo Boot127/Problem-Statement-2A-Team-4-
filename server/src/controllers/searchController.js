@@ -1,3 +1,21 @@
-// TODO: shared — cross-entity search request handler
+// Shared — cross-entity search request handler (Section 14.6).
 
-module.exports = {};
+const searchService = require('../services/searchService');
+
+function search(req, res) {
+  const result = searchService.search(
+    {
+      search: req.query.q,
+      country: req.query.country,
+      category: req.query.category,
+      workerType: req.query.workerType,
+      status: req.query.status,
+      page: req.query.page,
+      limit: req.query.limit,
+    },
+    req.user
+  );
+  res.json(result);
+}
+
+module.exports = { search };

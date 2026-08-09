@@ -1,6 +1,13 @@
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const env = require('./config/env');
+require('./config/db'); // opens the shared SQLite connection and ensures its schema exists
+
+const authRoutes = require('./routes/authRoutes');
+const recordRoutes = require('./routes/recordRoutes');
+const searchRoutes = require('./routes/searchRoutes');
+const auditRoutes = require('./routes/auditRoutes');
 const permitRoutes = require('./routes/permitRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const reviewController = require('./controllers/reviewController');
@@ -11,17 +18,27 @@ const app = express();
 app.use(cors({ origin: env.clientOrigin }));
 app.use(express.json());
 
-// Work Permit Management (Dev 2) and Review & Approval Workflow (Dev 3) are
-// wired up so far. The other feature routes (auth, records, newsletters,
-// search, audit) are TODO for their respective owners — see routes/*.js.
+// Serves uploaded source-document attachments (FR-1.5). Static files only —
+// access control on *which* records/attachments exist is enforced by the
+// /records API, not by this route.
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
+app.get('/api/v1/health', (req, res) => res.json({ status: 'ok' }));
+
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/records', recordRoutes);
+app.use('/api/v1/search', searchRoutes);
+app.use('/api/v1/audit-logs', auditRoutes);
 app.use('/api/v1/permits', permitRoutes);
 app.use('/api/v1/reviews', reviewRoutes);
 app.get('/api/v1/notifications', reviewController.notifications);
 
-// Add new feature route mounts (auth, records, newsletters, search, audit)
-// ABOVE this line. errorHandler must stay the LAST app.use() call —
-// Express only routes errors to handlers registered after the route that
-// threw, so anything mounted below it will not have its errors caught.
+// Add new feature route mounts ABOVE this line. errorHandler
+// must stay the LAST app.use() call — Express only routes errors to
+// handlers registered after the route that threw, so anything mounted below
+// it will not have its errors caught.
+
+app.use((req, res) => res.status(404).json({ message: 'Not found' }));
 app.use(errorHandler);
 
 module.exports = app;

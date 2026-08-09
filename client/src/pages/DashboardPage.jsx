@@ -13,7 +13,10 @@ import {
   ListItemAvatar,
   ListItemText,
   Divider,
+  Alert,
+  Button,
 } from '@mui/material';
+import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
@@ -21,6 +24,7 @@ import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import PageHeader from '../components/common/PageHeader';
 import permitService from '../api/permitService';
+import { REVIEW_STATE_LABELS } from '../utils/enums';
 
 // Compliance Content, Pending Reviews, and Detected Legal Updates are owned
 // by the other three developers and are not implemented yet, so their counts
@@ -67,15 +71,58 @@ const RECENT_ACTIVITY = [
   { text: 'Malaysia Employment Pass created', time: '2 days ago' },
 ];
 
+// Work-permit information-health warnings surfaced on the dashboard
+// (improvement plan Section 10.3). Each row links straight into the list page
+// pre-filtered to that review state, so a warning is one click from the work.
+const HEALTH_WARNINGS = [
+  {
+    key: 'OUTDATED',
+    severity: 'error',
+    label: (n) => `${n} work permit${n === 1 ? '' : 's'} marked outdated`,
+  },
+  {
+    key: 'REVIEW_DUE',
+    severity: 'warning',
+    label: (n) => `${n} work permit${n === 1 ? '' : 's'} due for review`,
+  },
+  {
+    key: 'INCOMPLETE',
+    severity: 'warning',
+    label: (n) => `${n} work permit${n === 1 ? '' : 's'} incomplete`,
+  },
+  {
+    key: 'DUE_SOON',
+    severity: 'info',
+    label: (n) => `${n} work permit${n === 1 ? '' : 's'} due for review soon`,
+  },
+];
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [activePermits, setActivePermits] = useState(null);
+  const [permitHealth, setPermitHealth] = useState(null);
 
   useEffect(() => {
-    permitService.list().then((permits) => {
-      setActivePermits(permits.filter((p) => p.status !== 'ARCHIVED').length);
-    });
+    // The list endpoint is paginated, so derive the active count from the
+    // server-side statusCounts rather than counting the current page.
+    permitService
+      .list({ limit: 1 })
+      .then(({ statusCounts }) => {
+        setActivePermits((statusCounts?.DRAFT ?? 0) + (statusCounts?.PUBLISHED ?? 0));
+      })
+      .catch(() => setActivePermits(null));
+
+    // Health is a separate, deliberately cheap-to-skip call: if it fails the
+    // dashboard still renders everything else.
+    permitService
+      .healthSummary()
+      .then(setPermitHealth)
+      .catch(() => setPermitHealth(null));
   }, []);
+
+  const activeWarnings = permitHealth
+    ? HEALTH_WARNINGS.filter((w) => (permitHealth[w.key] ?? 0) > 0)
+    : [];
 
   return (
     <Box>
@@ -83,6 +130,45 @@ export default function DashboardPage() {
         title="Dashboard"
         subtitle="An overview of compliance content, work permits, reviews, and legal updates."
       />
+
+      {activeWarnings.length > 0 && (
+        <Card variant="outlined" sx={{ mb: 4, borderColor: 'warning.light' }}>
+          <CardContent>
+            <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1.5 }}>
+              <WarningAmberOutlinedIcon fontSize="small" color="warning" />
+              <Typography variant="subtitle1" fontWeight={700}>
+                Work permits needing attention
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                · average completeness {permitHealth.averageCompleteness}%
+              </Typography>
+            </Stack>
+            <Stack spacing={1}>
+              {activeWarnings.map(({ key, severity, label }) => (
+                <Alert
+                  key={key}
+                  severity={severity}
+                  action={
+                    <Button
+                      color="inherit"
+                      size="small"
+                      onClick={() => navigate(`/permits?reviewState=${key}`)}
+                      // Three buttons all reading "Review" are ambiguous out of
+                      // context, which is exactly how a screen reader announces
+                      // them. The label restates which group it opens.
+                      aria-label={`Open the ${REVIEW_STATE_LABELS[key].toLowerCase()} work permits`}
+                    >
+                      Review
+                    </Button>
+                  }
+                >
+                  {label(permitHealth[key])}
+                </Alert>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
 
       <Box
         sx={{
@@ -95,7 +181,7 @@ export default function DashboardPage() {
         {SUMMARY_CARDS.map(({ key, label, value, icon: Icon, color, live }) => (
           <Card key={key} variant="outlined">
             <CardContent>
-              <Stack direction="row" spacing={2} alignItems="center">
+              <Stack direction="row" spacing={2} sx={{ alignItems: 'center' }}>
                 <Avatar sx={{ bgcolor: `${color}.main`, width: 44, height: 44 }}>
                   <Icon fontSize="small" />
                 </Avatar>
@@ -128,7 +214,7 @@ export default function DashboardPage() {
           <Card key={path} variant="outlined">
             <CardActionArea onClick={() => navigate(path)} sx={{ height: '100%', p: 0.5 }}>
               <CardContent>
-                <Stack direction="row" spacing={2} alignItems="flex-start">
+                <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
                   <Avatar sx={{ bgcolor: 'primary.main', width: 44, height: 44 }}>
                     <Icon fontSize="small" />
                   </Avatar>

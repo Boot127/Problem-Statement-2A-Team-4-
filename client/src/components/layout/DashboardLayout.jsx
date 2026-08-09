@@ -16,13 +16,24 @@ import {
   Divider,
   Container,
   useMediaQuery,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import MenuIcon from '@mui/icons-material/Menu';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
+import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
 import { NAV_ITEMS } from './navConfig';
+import { useAuth } from '../../context/AuthContext';
+import { ROLE_LABELS } from '../../utils/enums';
 
 const DRAWER_WIDTH = 260;
+
+function initialsFor(fullName) {
+  if (!fullName) return '?';
+  const parts = fullName.trim().split(/\s+/);
+  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
+}
 
 function isPathActive(path, pathname) {
   if (path === '/') return pathname === '/';
@@ -33,12 +44,20 @@ export default function DashboardLayout({ children }) {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userMenuAnchor, setUserMenuAnchor] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   const goTo = (path) => {
     navigate(path);
     if (!isDesktop) setMobileOpen(false);
+  };
+
+  const handleLogout = async () => {
+    setUserMenuAnchor(null);
+    await logout();
+    navigate('/login', { replace: true });
   };
 
   const sidebar = (
@@ -110,9 +129,32 @@ export default function DashboardLayout({ children }) {
               <NotificationsNoneOutlinedIcon />
             </Badge>
           </IconButton>
-          <Avatar sx={{ width: 34, height: 34, bgcolor: 'secondary.main', fontSize: 14 }}>
-            CO
-          </Avatar>
+          <IconButton
+            onClick={(e) => setUserMenuAnchor(e.currentTarget)}
+            aria-label="Account menu"
+            sx={{ p: 0 }}
+          >
+            <Avatar sx={{ width: 34, height: 34, bgcolor: 'secondary.main', fontSize: 14 }}>
+              {initialsFor(user?.fullName)}
+            </Avatar>
+          </IconButton>
+          <Menu anchorEl={userMenuAnchor} open={Boolean(userMenuAnchor)} onClose={() => setUserMenuAnchor(null)}>
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography variant="body2" fontWeight={600}>
+                {user?.fullName}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {ROLE_LABELS[user?.role] || user?.role}
+              </Typography>
+            </Box>
+            <Divider />
+            <MenuItem onClick={handleLogout}>
+              <ListItemIcon sx={{ minWidth: 32 }}>
+                <LogoutOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              Logout
+            </MenuItem>
+          </Menu>
         </Toolbar>
       </AppBar>
 

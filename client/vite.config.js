@@ -5,10 +5,15 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    // Forward API calls to the local Express server so the frontend works
-    // out of the box without needing a client/.env override.
+    // Forward API calls (and uploaded attachments) to the local Express
+    // server so the frontend works out of the box without needing a
+    // client/.env override.
     proxy: {
       '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/uploads': {
         target: 'http://localhost:5000',
         changeOrigin: true,
       },
