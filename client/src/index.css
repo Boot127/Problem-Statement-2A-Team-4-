@@ -54,12 +54,11 @@ body {
   margin: 0;
 }
 
+/* The dashboard shell (components/layout/DashboardLayout.jsx) manages its own
+   width, alignment and borders. The original Vite scaffold centred all text and
+   pinned #root to a fixed 1126px with side borders, which fought the layout, so
+   only the flex container remains here. */
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
   flex-direction: column;
