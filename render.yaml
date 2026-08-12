@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: hrckmp-server
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.5.0
+      - key: PORT
+        value: 10000
+      - key: DB_PROVIDER
+        value: postgres
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_URL_DIRECT
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1d
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: PERMIT_AI_PROVIDER
+        value: mock
+      - key: ENABLE_DEV_SEED
+        value: false
