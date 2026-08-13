@@ -617,6 +617,20 @@ async function updatePermit(id, data) {
   if (!existing) return null;
   const now = new Date().toISOString();
   const row = { ...toDbRow(data), updated_at: now };
+  // Un-archiving is an administrator action, handled by
+  // POST /admin/archives/WORK_PERMIT/:id/restore. Without this guard any
+  // authenticated caller could walk straight around that route by saving an
+  // archived permit with an active status — and because a plain update never
+  // touches previous_status/archived_at, the row was left claiming to be
+  // archived while showing as live. Editing an archived permit is still
+  // allowed; only moving it back out of ARCHIVED is refused. Note toDbRow
+  // defaults an absent status to DRAFT, so this also catches a body that
+  // simply omits the field.
+  if (existing.status === 'ARCHIVED' && row.status !== 'ARCHIVED') {
+    throw new ValidationError(
+      'An archived work permit cannot be saved with an active status. An administrator must restore it from Archive Management first.'
+    );
+  }
   return toApiShape(await permitRepository.update(id, row));
 }
 
