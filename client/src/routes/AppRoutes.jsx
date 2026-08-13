@@ -17,6 +17,7 @@ import ReviewDetailPage from '../pages/reviews/ReviewDetailPage';
 import UpdatesPage from '../pages/updates/UpdatesPage';
 import SearchPage from '../pages/search/SearchPage';
 import AdminPage from '../pages/admin/AdminPage';
+import ProfilePage from '../pages/profile/ProfilePage';
 import RoleProtectedRoute from './RoleProtectedRoute';
 
 // Work Permit routes (Developer 2) and Review & Approval routes (Developer 3)
@@ -48,8 +49,12 @@ export default function AppRoutes() {
       <Route path="/reviews/:id/edit" element={<ReviewFormPage />} />
       <Route path="/updates" element={<UpdatesPage />} />
       <Route path="/search" element={<SearchPage />} />
+      <Route path="/profile" element={<ProfilePage />} />
       <Route path="/admin" element={<RoleProtectedRoute roles={['admin']}><AdminPage /></RoleProtectedRoute>} />
+      <Route path="/admin/users" element={<RoleProtectedRoute roles={['admin']}><AdminPage /></RoleProtectedRoute>} />
       <Route path="/admin/archives" element={<RoleProtectedRoute roles={['admin']}><AdminPage /></RoleProtectedRoute>} />
+      <Route path="/admin/activity" element={<RoleProtectedRoute roles={['admin']}><AdminPage /></RoleProtectedRoute>} />
+      <Route path="/admin/security" element={<RoleProtectedRoute roles={['admin']}><AdminPage /></RoleProtectedRoute>} />
       <Route path="*" element={<DashboardPage />} />
     </Routes>
   );

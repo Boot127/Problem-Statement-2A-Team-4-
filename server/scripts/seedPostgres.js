@@ -1,4 +1,5 @@
 const { createDirectPool, safeMessage } = require('./postgresScriptUtils');
+const { ensureEmptyDestination } = require('./migrateSqliteToPostgres');
 
 const SEEDS = [
   ['SG','Employment Pass (EP)','Singapore Employment Pass','Work pass for foreign professionals, managers, and executives.','Job offer from a Singapore-registered company and applicable qualifying criteria.',21,24,105,'SGD','FOREIGN_WORKER','CLIENT_SHAREABLE','https://www.mom.gov.sg/passes-and-permits/employment-pass','PUBLISHED'],
@@ -12,8 +13,11 @@ async function run() {
   const pool = createDirectPool();
   const client = await pool.connect();
   try {
-    const count = Number((await client.query('SELECT COUNT(*) count FROM work_permits')).rows[0].count);
-    if (count) throw new Error(`Development seed aborted because work_permits already contains ${count} rows`);
+    try {
+      await ensureEmptyDestination(client);
+    } catch (error) {
+      throw new Error(`Development seed requires a completely empty application database. ${error.message}`);
+    }
     await client.query('BEGIN');
     try {
       const now = new Date().toISOString();
@@ -39,7 +43,11 @@ async function run() {
   }
 }
 
-run().catch((error) => {
-  console.error(`Development seed failed: ${safeMessage(error)}`);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  run().catch((error) => {
+    console.error(`Development seed failed: ${safeMessage(error)}`);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { run };

@@ -26,22 +26,19 @@ import BusinessCenterOutlinedIcon from '@mui/icons-material/BusinessCenterOutlin
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import LogoutOutlinedIcon from '@mui/icons-material/LogoutOutlined';
+import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
+import SecurityOutlinedIcon from '@mui/icons-material/SecurityOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import reviewService from '../../api/reviewService';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_LABELS } from '../../utils/enums';
+import { initialsForUser, userProfile } from '../../utils/userProfile';
 import { NAV_ITEMS } from './navConfig';
 
 const EXPANDED_DRAWER_WIDTH = 264;
 const COLLAPSED_DRAWER_WIDTH = 80;
 const SIDEBAR_STORAGE_KEY = 'hrckmp_sidebar_collapsed';
-
-function initialsFor(fullName) {
-  if (!fullName) return '?';
-  const parts = fullName.trim().split(/\s+/);
-  return (parts[0][0] + (parts[1]?.[0] || '')).toUpperCase();
-}
 
 function isPathActive(path, pathname) {
   if (path === '/') return pathname === '/';
@@ -60,6 +57,7 @@ export default function DashboardLayout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const profile = userProfile(user);
 
   const visibleNavItems = useMemo(
     () => NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role)),
@@ -279,14 +277,14 @@ export default function DashboardLayout({ children }) {
           >
             <Box sx={{ display: { xs: 'none', sm: 'block' }, textAlign: 'right', maxWidth: 180 }}>
               <Typography variant="body2" fontWeight={700} noWrap>
-                {user?.fullName}
+                {profile.displayName}
               </Typography>
               <Typography variant="caption" noWrap sx={{ display: 'block', color: 'rgba(255,255,255,0.72)' }}>
                 {ROLE_LABELS[user?.role] || user?.role}
               </Typography>
             </Box>
             <Avatar sx={{ width: 36, height: 36, bgcolor: 'secondary.main', fontSize: 14 }}>
-              {initialsFor(user?.fullName)}
+              {initialsForUser(user)}
             </Avatar>
           </Stack>
           <Menu
@@ -295,15 +293,35 @@ export default function DashboardLayout({ children }) {
             onClose={() => setUserMenuAnchor(null)}
             slotProps={{ paper: { sx: { mt: 1, minWidth: 220 } } }}
           >
-            <Box sx={{ px: 2, py: 1.25 }}>
-              <Typography variant="body2" fontWeight={700}>
-                {user?.fullName}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {ROLE_LABELS[user?.role] || user?.role}
-              </Typography>
-            </Box>
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ px: 2, py: 1.25 }}>
+              <Avatar sx={{ width: 38, height: 38, bgcolor: 'secondary.main', fontSize: 14 }}>
+                {initialsForUser(user)}
+              </Avatar>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" fontWeight={700}>{profile.displayName}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {ROLE_LABELS[user?.role] || user?.role}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>
+                  {user?.email}
+                </Typography>
+              </Box>
+            </Stack>
             <Divider />
+            <MenuItem onClick={() => { setUserMenuAnchor(null); navigate('/profile'); }}>
+              <ListItemIcon sx={{ minWidth: 34 }}>
+                <PersonOutlineRoundedIcon fontSize="small" />
+              </ListItemIcon>
+              View Profile
+            </MenuItem>
+            {user?.role === 'admin' && (
+              <MenuItem onClick={() => { setUserMenuAnchor(null); navigate('/admin/security'); }}>
+                <ListItemIcon sx={{ minWidth: 34 }}>
+                  <SecurityOutlinedIcon fontSize="small" />
+                </ListItemIcon>
+                Security Settings
+              </MenuItem>
+            )}
             <MenuItem onClick={handleLogout}>
               <ListItemIcon sx={{ minWidth: 34 }}>
                 <LogoutOutlinedIcon fontSize="small" />

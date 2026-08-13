@@ -156,10 +156,15 @@ database to a real Neon project for production/shared use:
 3. `npm run db:migrate:sqlite-to-postgres` — one-time copy of your local
    `database/hrckmp.db` into the now-empty Postgres database, table by
    table in foreign-key-safe order (`scripts/migrateSqliteToPostgres.js`).
-   Refuses to run if the destination already has any rows, so it can't
-   silently duplicate data.
-4. `npm run db:verify` — compares row counts and checks for orphaned
-   foreign keys between the two databases (`scripts/verifyMigration.js`).
+   It validates both schemas first, refuses to run if any destination
+   business table has rows, imports all tables in one transaction, and
+   advances every identity sequence after preserving explicit IDs. It never
+   truncates or merges destination data.
+4. `npm run db:verify` — compares every migrated column row-by-row by
+   primary key (normalizing only expected provider representations), verifies
+   password-hash equality without printing hashes, checks declared and
+   polymorphic relationships, and confirms each next identity value is above
+   the imported maximum (`scripts/verifyMigration.js`).
 5. Only once that passes: set `DB_PROVIDER=postgres` and restart the
    server. Every repository now reads/writes Neon instead of the local
    SQLite file — nothing else changes, since they're all written against
@@ -171,6 +176,12 @@ loss past `Number.MAX_SAFE_INTEGER`) — every identity column in this schema
 is well within safe-integer range, and without the override every `row.id`
 would silently be a string under Postgres but a number under SQLite,
 breaking `===` comparisons throughout the app.
+
+Keep `ENABLE_DEV_SEED=false` throughout migration and normal Postgres use.
+The optional `npm run db:seed` command is only for a deliberately empty
+development database; it requires explicit enablement and must never be run
+after importing SQLite data. `npm run test:db-migration` runs the offline
+schema/import/verification safety suite without connecting to Neon.
 
 ## Setup
 

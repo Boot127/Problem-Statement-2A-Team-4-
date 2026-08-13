@@ -18,7 +18,10 @@ function sanitizeUser(user) {
     fullName: user.full_name,
     email: user.email,
     role: user.role,
+    isActive: Boolean(user.is_active),
+    failedAttempts: Number(user.failed_attempts || 0),
     lastLoginAt: user.last_login_at,
+    createdAt: user.created_at,
   };
 }
 
@@ -47,7 +50,7 @@ async function login(email, password) {
     expiresIn: config.jwtExpiresIn,
   });
 
-  return { token, user: sanitizeUser(user) };
+  return { token, user: sanitizeUser(await userRepository.findById(user.user_id)) };
 }
 
 // The API is stateless (Section 9) — there is no server-side session to

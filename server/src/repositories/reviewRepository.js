@@ -11,7 +11,7 @@ async function findAll({ search, targetType, status } = {}) {
   if (status) clauses.push(`review_status = ${bind(status)}`);
   if (search) {
     const like = bind(`%${search}%`);
-    clauses.push(`(title LIKE ${like} OR COALESCE(description, '') LIKE ${like})`);
+    clauses.push(`(LOWER(title) LIKE LOWER(${like}) OR LOWER(COALESCE(description, '')) LIKE LOWER(${like}))`);
   }
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   return (await db.query(`SELECT * FROM review_requests ${where} ORDER BY created_at DESC`, params)).rows;

@@ -33,6 +33,7 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import dashboardService from '../api/dashboardService';
 import { useAuth } from '../context/AuthContext';
 import { REVIEW_STATE_LABELS } from '../utils/enums';
+import { userProfile } from '../utils/userProfile';
 
 const KPI_CARDS = [
   {
@@ -224,7 +225,7 @@ export default function DashboardPage() {
     };
   }, [fetchDashboard]);
 
-  const firstName = user?.fullName?.trim().split(/\s+/)[0];
+  const firstName = userProfile(user).displayName.trim().split(/\s+/)[0];
   const today = useMemo(
     () => new Intl.DateTimeFormat(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()),
     [],
@@ -251,7 +252,15 @@ export default function DashboardPage() {
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between">
           <Box>
-            <Typography component="h1" variant="h4" sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}>
+            <Typography
+              component="h1"
+              variant="h4"
+              sx={{
+                color: (theme) => `${theme.palette.text.primary} !important`,
+                fontSize: { xs: '1.75rem', sm: '2.125rem' },
+                fontWeight: 750,
+              }}
+            >
               Dashboard
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>

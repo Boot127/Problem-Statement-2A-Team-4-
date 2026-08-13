@@ -17,7 +17,7 @@ async function listCompliance({ search, country, type, limit, offset }) {
   };
   if (search) {
     const like = bind(`%${search}%`);
-    clauses.push(`(r.title LIKE ${like} OR COALESCE(r.summary,'') LIKE ${like} OR c.country_name LIKE ${like})`);
+    clauses.push(`(LOWER(r.title) LIKE LOWER(${like}) OR LOWER(COALESCE(r.summary,'')) LIKE LOWER(${like}) OR LOWER(c.country_name) LIKE LOWER(${like}))`);
   }
   if (country) clauses.push(`c.country_code=${bind(country)}`);
   if (type) clauses.push(`r.category=${bind(type)}`);
@@ -70,7 +70,7 @@ async function listReviews({ search, type, limit, offset }) {
   };
   if (search) {
     const like = bind(`%${search}%`);
-    clauses.push(`(r.title LIKE ${like} OR COALESCE(r.description,'') LIKE ${like})`);
+    clauses.push(`(LOWER(r.title) LIKE LOWER(${like}) OR LOWER(COALESCE(r.description,'')) LIKE LOWER(${like}))`);
   }
   if (type) clauses.push(`r.target_type=${bind(type)}`);
   const where = `WHERE ${clauses.join(' AND ')}`;

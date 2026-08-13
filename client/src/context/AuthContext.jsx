@@ -9,11 +9,10 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(getToken()));
 
   useEffect(() => {
     if (!getToken()) {
-      setLoading(false);
       return;
     }
     authService
@@ -34,6 +33,12 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const currentUser = await authService.me();
+    setUser(currentUser);
+    return currentUser;
+  }, []);
+
   const value = {
     user,
     role: user?.role,
@@ -41,12 +46,15 @@ export function AuthProvider({ children }) {
     isAuthenticated: Boolean(user),
     login,
     logout,
+    refreshUser,
     canEdit: user?.role === 'compliance',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// This small provider module intentionally exports its matching hook.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   return useContext(AuthContext);
 }

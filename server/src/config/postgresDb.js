@@ -52,7 +52,15 @@ async function transaction(work) {
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    if (client) await client.query('ROLLBACK');
+    if (client) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        // Preserve the application failure while ensuring the client is still
+        // released below; expose rollback context without connection strings.
+        error.rollbackError = sanitise(rollbackError);
+      }
+    }
     throw sanitise(error);
   } finally {
     if (client) client.release();

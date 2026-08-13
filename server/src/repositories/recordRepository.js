@@ -80,7 +80,7 @@ async function list({ country, category, workerType, status, search, allowedVisi
   if (status) clauses.push(`r.status = ${bind(status)}`);
   if (search) {
     const like = bind(`%${search}%`);
-    clauses.push(`(r.title LIKE ${like} OR r.summary LIKE ${like} OR r.full_text LIKE ${like})`);
+    clauses.push(`(LOWER(r.title) LIKE LOWER(${like}) OR LOWER(COALESCE(r.summary, '')) LIKE LOWER(${like}) OR LOWER(COALESCE(r.full_text, '')) LIKE LOWER(${like}))`);
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';

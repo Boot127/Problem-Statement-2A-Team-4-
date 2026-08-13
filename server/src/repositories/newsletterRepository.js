@@ -32,7 +32,7 @@ async function listNewsletters({ search = '', country = '', status = '' } = {}) 
 
   if (search.trim()) {
     const like = bind(`%${search.trim()}%`);
-    conditions.push(`(n.title LIKE ${like} OR n.source LIKE ${like} OR n.notes LIKE ${like})`);
+    conditions.push(`(LOWER(n.title) LIKE LOWER(${like}) OR LOWER(COALESCE(n.source, '')) LIKE LOWER(${like}) OR LOWER(COALESCE(n.notes, '')) LIKE LOWER(${like}))`);
   }
   if (country.trim()) conditions.push(`n.country = ${bind(country.trim())}`);
   if (status.trim()) conditions.push(`n.status = ${bind(status.trim())}`);

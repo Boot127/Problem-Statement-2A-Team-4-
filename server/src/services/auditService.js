@@ -7,7 +7,7 @@ const auditRepository = require('../repositories/auditRepository');
 // adminArchiveService.js. Audit writes are insert-only and never block the
 // action they're logging.
 function log({ userId, action, entityType, entityId, oldValue, newValue }) {
-  auditRepository.insert({ userId, action, entityType, entityId, oldValue, newValue });
+  return auditRepository.insert({ userId, action, entityType, entityId, oldValue, newValue });
 }
 
 async function list({ role, userId, page, limit }) {
