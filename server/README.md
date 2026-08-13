@@ -188,10 +188,31 @@ schema/import/verification safety suite without connecting to Neon.
 ```bash
 cd server
 npm install
-cp .env.example .env      # defaults are fine for local dev
 npm run seed               # creates database/hrckmp.db, seeds countries + demo users + sample records + permits
 npm run dev                 # or: npm start
 ```
+
+### Configuration
+
+No `.env` file is required for local development: `src/config/env.js` defaults `DB_PROVIDER` to
+`sqlite`, falls back to a development JWT secret, and runs the AI assistant on its offline
+heuristic. Create `server/.env` only when you need one of the values below. It is gitignored —
+never commit a real connection string or API key.
+
+| Key | Default | Purpose |
+|---|---|---|
+| `PORT` | `5000` | Port the API listens on. Render injects its own; do not pin it there. |
+| `CLIENT_ORIGIN` | reflect any origin | CORS allowlist. Pin to the deployed frontend in production. |
+| `DB_PROVIDER` | `sqlite` | `sqlite` or `postgres`. Selects the branch in `config/database.js`. |
+| `SQLITE_DB_PATH` | `database/hrckmp.db` | Local SQLite file. Only read when `DB_PROVIDER=sqlite`. |
+| `DATABASE_URL` | — | Neon **pooled** URL. Required when `DB_PROVIDER=postgres`. |
+| `DATABASE_URL_DIRECT` | — | Neon **direct** URL, used by the `db:*` migration scripts. |
+| `JWT_SECRET` | insecure dev value | Signing secret. Must be set to a real value in production. |
+| `JWT_EXPIRES_IN` | `1d` | Token lifetime. |
+| `AI_API_KEY` | — | Groq key (https://console.groq.com/keys). Blank runs the offline fallback. |
+| `PERMIT_AI_PROVIDER` | `mock` | Work Permit extraction provider. `mock` needs no key. |
+| `PERMIT_AI_ENDPOINT` / `PERMIT_AI_API_KEY` / `PERMIT_AI_MODEL` | — | Only used when the provider is not `mock`. |
+| `ENABLE_DEV_SEED` | `false` | Guards `db:seed`, which also refuses to run unless every table is empty. |
 
 ### Demo accounts (seeded)
 

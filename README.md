@@ -39,9 +39,13 @@ scaffold and project documentation).
 git clone https://github.com/Boot127/Problem-Statement-2A-Team-4-.git
 cd Problem-Statement-2A-Team-4-
 
-cd server && npm install && cp .env.example .env && npm run seed && npm run dev   # terminal 1
-cd client && npm install && npm run dev                                           # terminal 2
+cd server && npm install && npm run seed && npm run dev   # terminal 1
+cd client && npm install && npm run dev                   # terminal 2
 ```
+
+No `.env` is needed for local development — `server/src/config/env.js` defaults to SQLite and
+supplies every other value. Create one only to point the server at Postgres/Neon or to enable the
+AI assistant; `server/README.md` documents the keys.
 
 Then open the client and log in with any seeded demo account (`server/README.md` lists them). See
 that same file for the optional Postgres/Neon production setup.
