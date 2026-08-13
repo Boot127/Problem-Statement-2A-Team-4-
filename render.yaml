@@ -10,8 +10,10 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.5.0
-      - key: PORT
-        value: 10000
+      # PORT is deliberately not set here. Render injects it and detects the
+      # port the service binds; pinning our own value risks binding somewhere
+      # Render is not watching, which surfaces as a failed health check
+      # rather than an obvious error. src/index.js already reads process.env.PORT.
       - key: DB_PROVIDER
         value: postgres
       - key: DATABASE_URL
