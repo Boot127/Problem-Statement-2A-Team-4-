@@ -4,6 +4,7 @@
 
 import { countryName } from './countries';
 import { RECORD_CATEGORY_LABELS, WORKER_TYPE_LABELS } from './enums';
+import { saveBlob } from './fileDownload';
 
 // Prefixing values that start with =, +, -, or @ with a tab prevents CSV
 // injection when the file is opened in spreadsheet software.
@@ -30,13 +31,5 @@ export function buildRecordsCsv(records) {
 }
 
 export function downloadCsv(filename, csvContent) {
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  saveBlob(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }), filename);
 }

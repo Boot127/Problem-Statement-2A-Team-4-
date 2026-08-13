@@ -270,10 +270,17 @@ export default function SourceDocumentsPanel({ permitId, onChanged, compact = fa
     });
   };
 
-  // A plain navigation, not an XHR: the server responds with a
-  // Content-Disposition attachment header, so the browser saves the file.
-  const handleDownload = (doc) => {
-    window.open(permitService.sourceDocumentDownloadUrl(permitId, doc.id), '_blank', 'noopener');
+  // Fetched as an authenticated XHR rather than a plain navigation: the
+  // endpoint requires a token now, which window.open would not send. Not
+  // routed through `run` because a download changes nothing — refetching the
+  // list and notifying the parent afterwards would be pointless work.
+  const handleDownload = async (doc) => {
+    setError('');
+    try {
+      await permitService.downloadSourceDocument(permitId, doc.id, doc.fileName);
+    } catch (err) {
+      setError(getApiErrorMessage(err));
+    }
   };
 
   const activeCount = documents?.filter((d) => d.status === 'ACTIVE').length ?? 0;

@@ -5,6 +5,7 @@
 // localStorage-backed version, so the permit pages needed no changes.
 
 import axiosClient from './axiosClient';
+import { saveBlob } from '../utils/fileDownload';
 
 // Returns the paginated envelope:
 // { items, page, limit, total, totalPages, statusCounts }
@@ -212,15 +213,45 @@ function deleteSourceDocument(permitId, documentId) {
     .then((res) => res.data);
 }
 
-// Absolute URL for the download endpoint. The server streams the file with a
-// Content-Disposition attachment header, so a plain link is enough — the
-// client never learns the stored path.
-function sourceDocumentDownloadUrl(permitId, documentId) {
-  return `${axiosClient.defaults.baseURL}/permits/${permitId}/source-documents/${documentId}/download`;
+// Downloads below go through axios rather than a plain link or window.open:
+// every /permits route requires an Authorization header, which a browser
+// navigation would not send. The bytes are fetched as a blob and handed to
+// the browser as a save, so the client still never learns the stored path.
+//
+// The caller supplies the filename because Content-Disposition is not
+// readable cross-origin unless the server explicitly exposes it, and the
+// deployed client (Vercel) and API (Render) are on different origins.
+function downloadBlob(path, filename) {
+  return axiosClient
+    .get(path, { responseType: 'blob' })
+    .then((res) => saveBlob(res.data, filename))
+    .catch(unwrapBlobError);
 }
 
-function permitGuideDocxUrl(permitId) {
-  return `${axiosClient.defaults.baseURL}/permits/${permitId}/guide.docx`;
+// With responseType 'blob' an error body arrives as a Blob too, which hides
+// the server's JSON { message } from getApiErrorMessage. Re-hydrate it so
+// callers show the real reason instead of "Request failed with status code".
+async function unwrapBlobError(error) {
+  const data = error.response?.data;
+  if (data instanceof Blob) {
+    try {
+      error.response.data = JSON.parse(await data.text());
+    } catch {
+      // Non-JSON body (an HTML error page, say) — leave it for the fallback.
+    }
+  }
+  throw error;
+}
+
+function downloadSourceDocument(permitId, documentId, filename) {
+  return downloadBlob(
+    `/permits/${permitId}/source-documents/${documentId}/download`,
+    filename
+  );
+}
+
+function downloadPermitGuideDocx(permitId, filename = `permit-${permitId}-guide.docx`) {
+  return downloadBlob(`/permits/${permitId}/guide.docx`, filename);
 }
 
 function reminders(type = '') {
@@ -320,8 +351,8 @@ export default {
   archiveSourceDocument,
   restoreSourceDocument,
   deleteSourceDocument,
-  sourceDocumentDownloadUrl,
-  permitGuideDocxUrl,
+  downloadSourceDocument,
+  downloadPermitGuideDocx,
   extractSourceDocument,
   applySourceExtractionDraft,
   compareSourceDocument,

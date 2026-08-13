@@ -1,4 +1,5 @@
 const express = require('express');
+const auth = require('../middleware/auth');
 const permitController = require('../controllers/permitController');
 const permitStepController = require('../controllers/permitStepController');
 const permitDocumentController = require('../controllers/permitDocumentController');
@@ -12,6 +13,13 @@ const permitProcessCopyController = require('../controllers/permitProcessCopyCon
 const permitGuideController = require('../controllers/permitGuideController');
 
 const router = express.Router();
+
+// Every permit endpoint requires an authenticated caller. Without this, all
+// of the routes below — including the writes — were reachable with no token
+// at all, which is survivable while the API only ever listens on localhost
+// but becomes an open write API the moment it is deployed to a public URL.
+// Reads stay open to any authenticated role, matching recordRoutes.js.
+router.use(auth);
 
 // Dev 2 — work_permits CRUD (Section 14.3).
 router.get('/', permitController.list);
